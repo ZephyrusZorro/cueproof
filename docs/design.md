@@ -16,7 +16,7 @@ A static TypeScript app with Vite has a small deployment surface and can inspect
 
 Pure domain modules parse tracks, match cues, surface findings and serialize handoffs. Input limits are 2 MiB, 2,500 cues per track, 8,000 code units per cue, and 500 code units per note. Use UTF-8 with optional BOM. A bounded order-preserving alignment uses normalized text and time evidence. A consistent offset can inform pairing while retaining real deltas. Split/merge proposals cover adjacent pairs with identical normalized text in context. Malformed cue structures are rejected before the review is replaced.
 
-IndexedDB stores a versioned snapshot per origin, with compare-and-swap writes so another tab's edits cannot be overwritten silently. Explicit file exports support moving and archiving work. Imported text is inserted as text, and external requests are unnecessary for operation. Static hosting can use GitHub Pages. Build infrastructure needs Node 22.12+ or Node 24 LTS and npm. Browser support depends on modern File, IndexedDB, and media APIs.
+IndexedDB stores a versioned snapshot per origin, with compare-and-swap writes so another tab's edits cannot be overwritten silently. Explicit file exports support moving and archiving work. Imported text is inserted as text, and external requests are unnecessary for operation. Static hosting can use GitHub Pages. Build infrastructure needs Node 24 or newer and npm. Browser support depends on modern File, IndexedDB, and media APIs.
 
 ## Acceptance
 

@@ -14,6 +14,7 @@
 | 4. Review state | review.ts, storage.ts | Test dispositions, export/restore, hostile text and stale tab writes |
 | 5. Review desk | index.html, main.ts, desk.ts, CSS, sample | Verify import, keyboard flow, filters, decisions and reload |
 | 6. Media and handoff | player.ts and connected controls | Verify playback, seek, track switching, CSV and JSON downloads |
-| 7. Release verification | Browser workflow, benchmark, CI, deployment, handover | Build and test fresh, verify desktop/mobile, remote deployment and exact remote revision |
+| 7. Review fixes | Timing edge cases, detailed CSV evidence, import recovery, content policy | Reproduce and fix reviewer findings, verify the production build in Edge |
+| 8. Release verification | Browser workflow, benchmark, CI, deployment, handover | Build and test fresh, verify desktop/mobile, remote deployment and exact remote revision |
 
 Each engineering stage starts with focused tests and ends in a separate GitHub push after verification. Project-local data, build output, and workspace credentials are excluded.

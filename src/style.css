@@ -49,7 +49,8 @@ a { color: inherit; text-underline-offset: .2em; }
 .bar-divider { height: 21px; width: 1px; background: var(--line); }
 .bar-caption { color: var(--muted); font-size: 12px; }
 .local { margin-left: auto; color: var(--muted); font: 600 11px/1.4 var(--mono); letter-spacing: .03em; display: flex; align-items: center; gap: 7px; }
-.local span { width: 7px; height: 7px; border-radius: 50%; background: #567b38; }
+.local > [aria-hidden] { width: 7px; height: 7px; border-radius: 50%; background: #567b38; }
+.bar-inner .button { white-space: nowrap; }
 .frame { max-width: 1420px; margin: auto; padding: 0 clamp(20px, 4vw, 54px); }
 .frame:focus { outline: 0; }
 .hero { display: grid; grid-template-columns: 1.08fr .92fr; align-items: center; gap: clamp(30px, 7vw, 112px); padding: clamp(46px, 7vw, 94px) 0 clamp(38px, 5vw, 70px); }
@@ -194,6 +195,7 @@ textarea { resize: vertical; min-height: 55px; }
 @media (max-width: 640px) {
   .bar-inner { min-height: 60px; gap: 10px; }
   .bar-caption, .bar-divider { display: none; }
+  .local-long { display: none; }
   .hero, .start-grid { grid-template-columns: minmax(0, 1fr); }
   .hero { padding-top: 36px; padding-bottom: 28px; }
   .schematic { box-shadow: 5px 5px 0 #e0e6d7; }

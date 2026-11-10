@@ -44,11 +44,11 @@ export class Desk {
   private nextCue = get<HTMLButtonElement>('next-cue')
 
   constructor(private save: Save, private onSelection: OnSelection = () => {}) {
-    const refresh = () => { this.page = 0; this.renderQueue() }
+    const refresh = () => this.showPage(0)
     this.search.addEventListener('input', refresh)
     this.filter.addEventListener('change', refresh)
-    get('prev-page').addEventListener('click', () => { this.page--; this.renderQueue() })
-    get('next-page').addEventListener('click', () => { this.page++; this.renderQueue() })
+    get('prev-page').addEventListener('click', () => this.showPage(this.page - 1))
+    get('next-page').addEventListener('click', () => this.showPage(this.page + 1))
     this.nextCue.addEventListener('click', () => this.advance())
     this.form.addEventListener('submit', event => { event.preventDefault(); void this.submit() })
     this.form.addEventListener('input', () => this.refreshDecision())
@@ -121,9 +121,16 @@ export class Desk {
         if (filter !== 'queue' && filter !== 'advisories' && (review.decisions[row.id]?.status ?? 'pending') !== filter) return false
       }
       if (!query) return true
-      return [formatTime(row.time), cueText(row.before), cueText(row.after), ...rowLabels(row), review.decisions[row.id]?.note ?? '']
+      const times = [...row.before, ...row.after].flatMap(cue => [formatTime(cue.start), formatTime(cue.end)])
+      return [...times, cueText(row.before), cueText(row.after), ...rowLabels(row), review.decisions[row.id]?.note ?? '']
         .some(value => value.toLowerCase().includes(query))
     })
+  }
+
+  private showPage(page: number): void {
+    this.page = page
+    this.renderQueue()
+    get('queue').scrollTop = 0
   }
 
   private renderQueue(): void {

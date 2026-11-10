@@ -12,6 +12,6 @@ export function activeCaption(cues: Cue[], seconds: number): string {
 }
 
 export function playbackWindow(cues: Cue[], duration: number): [number, number] | undefined {
-  if (!cues.length || !Number.isFinite(duration) || cues[0].start >= duration * 1000) return
+  if (!cues.length || Number.isNaN(duration) || cues[0].start >= duration * 1000) return
   return [Math.max(0, (cues[0].start - 350) / 1000), Math.min(duration, (rangeEnd(cues) + 500) / 1000)]
 }
