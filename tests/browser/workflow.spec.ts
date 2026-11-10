@@ -112,6 +112,13 @@ test('keeps replacement modal open during a pending import', async ({ page }) =>
 })
 
 test('recovers from unsupported media and plays a local video with the selected track', async ({ page }) => {
+  await page.addInitScript(() => {
+    const read = File.prototype.arrayBuffer
+    File.prototype.arrayBuffer = async function () {
+      if (this.name === 'after.srt') await new Promise(resolve => setTimeout(resolve, 600))
+      return read.call(this)
+    }
+  })
   await page.goto('/')
   const start = page.locator('#landing')
   await start.locator('input[name=reference]').setInputFiles({
@@ -123,8 +130,10 @@ test('recovers from unsupported media and plays a local video with the selected 
     buffer: Buffer.from('1\n00:00:00,300 --> 00:00:01,450\nAfter'),
   })
   await start.getByRole('button', { name: 'Compare tracks' }).click()
+  await expect(page.locator('#desk')).toBeVisible()
   const picker = page.getByLabel('Attach local audio or video')
   await picker.setInputFiles({ name: 'broken.mp4', mimeType: 'video/mp4', buffer: Buffer.from('invalid media') })
+  await expect(page.locator('.media-name')).toHaveText('broken.mp4')
   await expect(page.locator('.media-error')).toContainText('could not be played')
   const frames = await page.evaluate(async () => {
     const canvas = document.createElement('canvas')
