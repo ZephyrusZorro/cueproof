@@ -1,0 +1,20 @@
+{
+  "name": "cueproof",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.ts",
+    "check": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.7"
+  }
+}
