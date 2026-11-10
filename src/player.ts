@@ -68,6 +68,11 @@ export class MediaPreview {
     this.review = review
   }
 
+  reset(): void {
+    this.clear()
+    this.review = this.row = undefined
+  }
+
   select(row: Row | undefined): void {
     if (this.row !== row && this.stopAt !== undefined) {
       this.stopAt = undefined

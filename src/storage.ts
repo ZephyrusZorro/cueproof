@@ -2,7 +2,7 @@ type Snapshot = { token: string; content: string | null }
 
 export class ConflictError extends Error {
   constructor() {
-    super('Another tab changed this review. Export your current work if needed, then reload to see the latest review.')
+    super('Another tab changed this review. Copy any unsaved note before reloading to see the latest review.')
   }
 }
 

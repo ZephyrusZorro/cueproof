@@ -1,7 +1,7 @@
 import { inlineDiff, type Row } from './compare.ts'
 import { get, el } from './dom.ts'
-import { actionable, decide, labels, rangeEnd, type Review, type Status } from './review.ts'
-import { formatTime, type Cue, type Track } from './track.ts'
+import { actionable, decide, labels, type Review, type Status } from './review.ts'
+import { formatTime, rangeEnd, type Cue } from './track.ts'
 
 const PAGE_SIZE = 24
 
@@ -71,7 +71,7 @@ export class Desk {
     const offset = get('offset-note')
     offset.hidden = !review.comparison.offset
     offset.textContent = review.comparison.offset
-      ? 'The matching cues suggest a track shift of ' + signedMs(review.comparison.offset) + '. Individual rows show actual time changes.'
+      ? 'Matching cues suggest a shift of ' + signedMs(review.comparison.offset) + ' across part or all of the track. Rows show actual time changes.'
       : ''
     this.renderSummary()
     this.renderQueue()
@@ -250,7 +250,8 @@ export class Desk {
           } else body.textContent = cue.text || '(empty cue)'
           card.append(body)
           const identifier = track.format === 'vtt' && cue.id ? ' · ID ' + cue.id : ''
-          card.append(el('p', 'cue-source', 'Cue ' + cue.number + ' · Line ' + cue.line + identifier))
+          const segment = cues.length > 1 ? ' · ' + cueRange([cue]) : ''
+          card.append(el('p', 'cue-source', 'Cue ' + cue.number + ' · Line ' + cue.line + identifier + segment))
           if (cue.settings) card.append(el('p', 'cue-source', 'Settings · ' + cue.settings))
         }
       }
@@ -299,6 +300,7 @@ export class Desk {
       this.review = updated
       this.renderSummary()
       this.renderQueue()
+      this.loadDecision()
       this.message.textContent = 'Decision saved.'
     } catch (error) {
       this.message.textContent = error instanceof Error ? error.message : 'Could not save the decision.'

@@ -1,5 +1,5 @@
 import { compareTracks, type Comparison, type Row } from './compare.ts'
-import { formatTime, parseTrack, type Cue, type Track, type TrackInput } from './track.ts'
+import { formatTime, parseTrack, rangeEnd, type Cue, type Track, type TrackInput } from './track.ts'
 
 export const MAX_NOTE = 500
 export const MAX_BACKUP_BYTES = 48 * 1024 * 1024
@@ -27,7 +27,7 @@ export function decide(review: Review, id: string, status: Status, note: string)
   if (!Object.hasOwn(labels, status) || note.length > MAX_NOTE) throw new Error('Enter a valid decision and a note up to 500 characters.')
   const decisions = { ...review.decisions }
   if (status === 'pending' && !note.trim()) delete decisions[id]
-  else decisions[id] = { status, note }
+  else decisions[id] = { status, note: note.replace(/\r\n?/g, '\n') }
   return { ...review, decisions }
 }
 
@@ -71,7 +71,7 @@ export function decodeReview(raw: string): Review {
       || typeof entry.note !== 'string' || entry.note.length > MAX_NOTE) {
       throw new Error('The backup contains an invalid review decision.')
     }
-    review.decisions[id] = { status: entry.status as Status, note: entry.note }
+    review.decisions[id] = { status: entry.status as Status, note: entry.note.replace(/\r\n?/g, '\n') }
   }
   return review
 }
@@ -81,18 +81,18 @@ function csvCell(value: string): string {
   return '"' + neutralized.replaceAll('"', '""') + '"'
 }
 
-export function rangeEnd(cues: Cue[]): number {
-  return Math.max(...cues.map(cue => cue.end))
-}
-
 export function csvReport(review: Review): string {
   const header = [
     'Reference file', 'Revision file', 'Row', 'Changes', 'Reference in', 'Reference out', 'Revision in',
     'Revision out', 'Start delta (ms)', 'End delta (ms)', 'Reference text', 'Revision text',
-    'Advisories', 'Decision', 'Note',
+    'Reference cue details', 'Revision cue details', 'Advisories', 'Decision', 'Note',
   ]
   const range = (cues: Cue[]) => cues.length ? [formatTime(cues[0].start), formatTime(rangeEnd(cues))] : ['', '']
   const text = (cues: Cue[]) => cues.map(cue => cue.text).join('\n\n')
+  const evidence = (cues: Cue[], track: Track) => cues.map(cue => [
+    'Cue ' + cue.number, formatTime(cue.start) + ' → ' + formatTime(cue.end),
+    track.format === 'vtt' && cue.id ? 'ID ' + cue.id : '', cue.settings,
+  ].filter(Boolean).join(' · ')).join('\n')
   const rows = review.comparison.rows.filter(actionable).map(row => {
     const decision = review.decisions[row.id]
     const metadata = (track: Track) => [track.format.toUpperCase(), ...track.metadata].join('\n\n')
@@ -102,6 +102,7 @@ export function csvReport(review: Review): string {
       String(row.delta?.[0] ?? ''), String(row.delta?.[1] ?? ''),
       csvCell(row.id === 'track' ? metadata(review.reference) : text(row.before)),
       csvCell(row.id === 'track' ? metadata(review.revision) : text(row.after)),
+      csvCell(evidence(row.before, review.reference)), csvCell(evidence(row.after, review.revision)),
       csvCell(row.issues.map(({cue, issue}) => 'Cue ' + cue + ' · ' + issue.message).join('\n')),
       csvCell(labels[decision?.status ?? 'pending']), csvCell(decision?.note ?? ''),
     ].join(',')

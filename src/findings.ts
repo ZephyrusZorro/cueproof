@@ -6,7 +6,7 @@ const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', nbsp: ' '
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
 export function visibleText(text: string): string {
-  return text.replace(/<\/?(?:[biucv]|lang|ruby|rt|font)(?=[\s.>])[^>]*>|<\d[\d:.]*>/gi, '')
+  return text.replace(/<\/?(?:[biucv]|lang|ruby|rt|font)(?=[\s.>])[^<>]*>|<\d[\d:.]*>/gi, '')
     .replace(/&(amp|lt|gt|nbsp|lrm|rlm);/g, (_, key: string) => entities[key])
 }
 

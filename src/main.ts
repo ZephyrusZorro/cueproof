@@ -11,10 +11,18 @@ import { readTrack } from './track.ts'
 let store: ReviewStore | undefined
 let token: string | null = null
 let writing = false
+let replacing = false
 const notice = get('notice')
 const dialog = get<HTMLDialogElement>('import-dialog')
 const newReview = get<HTMLButtonElement>('new-review')
 const example = get<HTMLButtonElement>('example')
+const closeImport = get<HTMLButtonElement>('close-import')
+const clearButton = get<HTMLButtonElement>('clear-review')
+
+function lockImport(active: boolean): void {
+  replacing = active
+  closeImport.disabled = clearButton.disabled = active
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : 'Something interrupted this action. Please try again.'
@@ -87,7 +95,8 @@ function mountImport(target: string): void {
   form.addEventListener('submit', async event => {
     event.preventDefault()
     const [reference, revision] = inputs.map(input => input.files?.[0])
-    if (!reference || !revision || submit.disabled) return
+    if (!reference || !revision || submit.disabled || replacing) return
+    lockImport(true)
     errorLine.hidden = true
     submit.disabled = true
     submit.textContent = 'Comparing…'
@@ -103,6 +112,7 @@ function mountImport(target: string): void {
       errorLine.hidden = false
     } finally {
       submit.disabled = example.disabled = false
+      lockImport(false)
       submit.textContent = 'Compare tracks →'
       inputs.forEach(input => input.disabled = false)
     }
@@ -121,14 +131,17 @@ newReview.addEventListener('click', () => {
   get('clear-error').hidden = true
   dialog.showModal()
 })
-get('close-import').addEventListener('click', () => dialog.close())
-const clearButton = get<HTMLButtonElement>('clear-review')
+closeImport.addEventListener('click', () => { if (!replacing) dialog.close() })
+dialog.addEventListener('cancel', event => { if (replacing) event.preventDefault() })
 clearButton.addEventListener('click', async () => {
-  clearButton.disabled = true
+  if (replacing) return
+  lockImport(true)
+  const compare = dialog.querySelector<HTMLButtonElement>('button[type=submit]')!
+  compare.disabled = true
   try {
     await persist(null)
     desk.reset()
-    media.clear()
+    media.reset()
     dialog.close()
     get('desk').hidden = newReview.hidden = true
     get('landing').hidden = false
@@ -140,7 +153,8 @@ clearButton.addEventListener('click', async () => {
     errorLine.textContent = message(error)
     errorLine.hidden = false
   } finally {
-    clearButton.disabled = false
+    compare.disabled = false
+    lockImport(false)
   }
 })
 example.addEventListener('click', async () => {

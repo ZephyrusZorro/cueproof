@@ -37,6 +37,15 @@ test('exports quoted timecoded evidence and neutralizes spreadsheet formulas', (
   assert.match(csv, /"Original wording"/)
 })
 
+test('exports cue IDs, settings and individual timecodes for changed presentation', () => {
+  const vtt = (id: string, line: string) => parseTrack({
+    name: id + '.vtt', source: 'WEBVTT\n\n' + id + '\n00:01.000 --> 00:04.000 line:' + line + '\nSame words.',
+  })
+  const csv = csvReport(createReview(vtt('old-id','60%'), vtt('new-id','80%')))
+  assert.match(csv, /Cue 1 · 00:00:01\.000 → 00:00:04\.000 · ID old-id · line:60%/)
+  assert.match(csv, /Cue 1 · 00:00:01\.000 → 00:00:04\.000 · ID new-id · line:80%/)
+})
+
 test('persists across connections and refuses a stale concurrent overwrite', async () => {
   const idb = new IDBFactory()
   const first = await ReviewStore.open(idb)

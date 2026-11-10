@@ -1,5 +1,5 @@
 import { diffWordsWithSpace } from 'diff'
-import type { Cue, Track } from './track.ts'
+import { rangeEnd, type Cue, type Track } from './track.ts'
 import { findIssues, visibleText, type Issue } from './findings.ts'
 
 export type Change = 'Text' | 'Timing' | 'Presentation' | 'Added' | 'Removed' | 'Split' | 'Merged' | 'Track details'
@@ -70,7 +70,7 @@ function makeRow(before: Cue[], after: Cue[], left: string[], right: string[], i
     if (a.text !== b.text) row.changes.push('Text')
     row.match = sameWords && left[a.number - 1] ? 'text' : 'timing'
   }
-  const delta: [number, number] = [b.start - a.start, after.at(-1)!.end - before.at(-1)!.end]
+  const delta: [number, number] = [b.start - a.start, rangeEnd(after) - rangeEnd(before)]
   row.delta = delta
   if (delta.some(Boolean)) row.changes.push('Timing')
   // SRT sequence numbers are positional. VTT identifiers may be referenced by CSS.
@@ -108,7 +108,8 @@ export function compareTracks(reference: Track, revision: Track): Comparison {
         best = current[j - 1]
         move = 2
       }
-      const weight = text && text === right[j - 1] && near <= 4000
+      const sameOriginal = offset && a.start === b.start && a.end === b.end && a.text === b.text
+      const weight = sameOriginal ? 11.1 : text && text === right[j - 1] && near <= 4000
         ? 8 + 3 * overlap - near / 4000
         : overlap >= 0.45 ? 2 + 4 * overlap : 0
       if (weight && previous[j - 1] + weight > best) {
@@ -117,7 +118,7 @@ export function compareTracks(reference: Track, revision: Track): Comparison {
       }
       if (j >= 2 && text && text === rightPair[j - 1]) {
         const first = after[j - 2]
-        if (b.start - first.end <= 1200 && proximity(start, end, first.start, b.end) >= 0.55
+        if (b.start - first.end <= 1200 && proximity(start, end, first.start, Math.max(first.end, b.end)) >= 0.55
           && previous[j - 2] + 13 > best) {
           best = previous[j - 2] + 13
           move = 4
@@ -125,7 +126,7 @@ export function compareTracks(reference: Track, revision: Track): Comparison {
       }
       if (i >= 2 && leftPair[i - 1] && leftPair[i - 1] === right[j - 1]) {
         const first = before[i - 2]
-        if (a.start - first.end <= 1200 && proximity(first.start + offset, end, b.start, b.end) >= 0.55
+        if (a.start - first.end <= 1200 && proximity(first.start + offset, Math.max(first.end, a.end) + offset, b.start, b.end) >= 0.55
           && older[j - 1] + 13 > best) {
           best = older[j - 1] + 13
           move = 5
@@ -151,8 +152,10 @@ export function compareTracks(reference: Track, revision: Track): Comparison {
     if (row.before.length && row.after.length) {
       const settings = (cues: Cue[], format: Track['format']) =>
         cues.map(cue => [format === 'vtt' ? cue.id : '', cue.settings])
-      if (JSON.stringify(settings(row.before, reference.format)) !== JSON.stringify(settings(row.after, revision.format))
-        && (row.before.length === row.after.length || [...row.before, ...row.after].some(cue => cue.settings))) {
+      const oldSettings = settings(row.before, reference.format)
+      const newSettings = settings(row.after, revision.format)
+      if ([...oldSettings, ...newSettings].some(pair => pair.some(Boolean))
+        && JSON.stringify(oldSettings) !== JSON.stringify(newSettings)) {
         row.changes.push('Presentation')
       }
     }

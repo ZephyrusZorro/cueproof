@@ -177,7 +177,8 @@ input[type=search], select { min-height: 37px; }
 .advisories ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
 .decision { border-top: 1px solid var(--line); padding: 12px 16px 15px; }
 .decision-fields { display: grid; grid-template-columns: minmax(115px, 1fr) minmax(0, 2fr); gap: 9px; }
-.decision-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 650; }
+.decision-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.decision-field label { font-size: 12px; font-weight: 650; }
 .note-label { position: relative; }
 .note-label span { font-size: 10px; color: var(--muted); font-weight: 400; position: absolute; top: 1px; right: 0; }
 textarea { resize: vertical; min-height: 55px; }

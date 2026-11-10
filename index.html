@@ -98,16 +98,18 @@
             <div id="detail" class="detail"></div>
             <form id="decision-form" class="decision" hidden>
               <div class="decision-fields">
-                <label>Decision
+                <div class="decision-field">
+                  <label for="decision-status">Decision</label>
                   <select id="decision-status">
                     <option value="pending">Unreviewed</option>
                     <option value="accepted">Accepted</option>
                     <option value="changes">Needs changes</option>
                   </select>
-                </label>
-                <label class="note-label">Note <span>Optional · 500 characters</span>
+                </div>
+                <div class="decision-field note-label">
+                  <label for="decision-note">Note <span>Optional · 500 characters</span></label>
                   <textarea id="decision-note" rows="2" maxlength="500" placeholder="What should the editor check?"></textarea>
-                </label>
+                </div>
               </div>
               <div class="decision-actions">
                 <button id="save-decision" class="button primary" type="submit">Save decision</button>

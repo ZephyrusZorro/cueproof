@@ -36,6 +36,22 @@ test('detects a track-wide offset without masking the real shifts', () => {
   assert.deepEqual(result.rows.map(row => row.delta), Array(4).fill([15000,15000]))
 })
 
+test('preserves an identical cue outside an inferred shift', () => {
+  const reference = track([[1000,3000,'Passage one.'],[4000,6000,'Passage two.'],[7000,9000,'Passage three.'],[30000,32000,'Unchanged cue.']])
+  const revision = track([[11000,13000,'Passage one.'],[14000,16000,'Passage two.'],[17000,19000,'Passage three.'],[30000,32000,'Unchanged cue.']])
+  const result = compareTracks(reference, revision)
+  assert.equal(result.offset, 10000)
+  assert.deepEqual(result.rows.map(row => row.delta), [[10000,10000],[10000,10000],[10000,10000],[0,0]])
+})
+
+test('a grouped range ends at the latest end time, even with nested cues', () => {
+  const reference = track([[1000,5000,'Alpha Bravo']])
+  const revision = track([[1000,6000,'Alpha'],[3000,5000,'Bravo']])
+  const { rows } = compareTracks(reference, revision)
+  assert.deepEqual(rows[0].changes, ['Split', 'Timing'])
+  assert.deepEqual(rows[0].delta, [0,1000])
+})
+
 test('does not match a distant isolated repeat and identifies metadata and cue settings', () => {
   const reference = parseTrack({name:'before.vtt',source:'WEBVTT\n\nNOTE Old\n\n00:01.000 --> 00:02.000 line:60%\nHi\n\n00:03.000 --> 00:04.000\nOkay.'})
   const revision = parseTrack({name:'after.vtt',source:'WEBVTT\n\nNOTE New\n\n00:01.000 --> 00:02.000 line:80%\nHi\n\n00:40.000 --> 00:41.000\nOkay.'})

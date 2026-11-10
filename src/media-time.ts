@@ -1,6 +1,5 @@
 import { visibleText } from './findings.ts'
-import { rangeEnd } from './review.ts'
-import type { Cue } from './track.ts'
+import { rangeEnd, type Cue } from './track.ts'
 
 export function activeCaption(cues: Cue[], seconds: number): string {
   const ms = seconds * 1000

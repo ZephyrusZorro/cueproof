@@ -28,6 +28,10 @@ export function formatTime(ms: number): string {
   return fields.map(n => String(n).padStart(2, '0')).join(':') + '.' + String(ms % 1000).padStart(3, '0')
 }
 
+export function rangeEnd(cues: Cue[]): number {
+  return Math.max(...cues.map(cue => cue.end))
+}
+
 export async function readTrack(file: File): Promise<Track> {
   if (file.size > MAX_FILE_BYTES) throw new Error(file.name + ' exceeds the 2 MiB caption limit.')
   const bytes = await file.arrayBuffer()
