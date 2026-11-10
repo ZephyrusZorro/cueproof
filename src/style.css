@@ -215,3 +215,32 @@ textarea { resize: vertical; min-height: 55px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
 }
+.text-button { border: 0; padding: 0; min-height: 29px; background: transparent; font-size: 12px; text-decoration: underline; text-underline-offset: .24em; }
+.example-card .text-button { margin-top: 7px; }
+.clear-review { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 17px; color: var(--muted); }
+.clear-review summary { cursor: pointer; min-height: 28px; font-size: 12px; }
+.clear-review p { margin-bottom: 10px; }
+.handoff-section { border-top: 1px solid var(--line); margin-top: 17px; padding-top: 15px; }
+.handoff-section h3 { font-family: var(--display); font-size: 20px; letter-spacing: -.035em; }
+.handoff-section p { margin: 5px 0 10px; color: var(--muted); }
+.handoff-buttons, #restore-form { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+#restore-form input { max-width: 100%; font-size: 12px; }
+#restore-form input::file-selector-button { min-height: 35px; border: 1px solid #c4cdbe; border-radius: 5px; background: var(--panel); color: var(--text); cursor: pointer; margin-right: 7px; }
+#handoff-error { flex-basis: 100%; color: #6c3421; }
+.media-preview { padding: 9px 16px; border-bottom: 1px solid var(--line); background: #f0f3ea; }
+.media-head, .media-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px 12px; align-items: center; }
+.media-name { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.media-buttons { display: flex; gap: 6px; }
+.media-file { position: relative; cursor: pointer; }
+.media-file input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.media-file:focus-within { outline: 3px solid #527b2f; outline-offset: 2px; }
+.media-stage { position: relative; margin-top: 8px; background: #17231d; border-radius: 6px; overflow: hidden; }
+.media-stage video { display: block; width: 100%; max-height: 320px; }
+.media-stage audio { display: block; width: 100%; }
+.media-caption { position: absolute; bottom: 51px; left: 50%; transform: translateX(-50%); max-width: 91%; padding: 3px 7px; border-radius: 3px; background: #0f1814; color: #fff; text-align: center; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; }
+.audio-stage { background: #e6ebe1; }
+.audio-stage .media-caption { position: static; transform: none; max-width: none; border-radius: 0; }
+.media-controls { margin-top: 7px; }
+.media-controls label { font-size: 12px; color: var(--muted); }
+.media-controls select { min-height: 34px; }
+.media-error { margin-top: 8px; font-size: 12px; color: #753820; }

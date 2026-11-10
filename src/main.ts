@@ -2,6 +2,8 @@ import './style.css'
 import { Desk } from './desk.ts'
 import { get } from './dom.ts'
 import { exampleReview } from './example.ts'
+import { Handoff } from './handoff.ts'
+import { MediaPreview } from './player.ts'
 import { createReview, decodeReview, encodeReview, type Review } from './review.ts'
 import { ReviewStore } from './storage.ts'
 import { readTrack } from './track.ts'
@@ -23,22 +25,29 @@ function announce(text: string): void {
   notice.hidden = !text
 }
 
-async function persist(review: Review): Promise<void> {
+async function persist(review: Review | null): Promise<void> {
   if (writing) throw new Error('A save is already in progress. Try again in a moment.')
   writing = true
   try {
-    if (store) token = (await store.write(encodeReview(review), token)).token
+    if (store) token = (await store.write(review ? encodeReview(review) : null, token)).token
   } finally {
     writing = false
   }
 }
 
-const desk = new Desk(persist)
+const media = new MediaPreview(get('player-slot'))
+const desk = new Desk(persist, row => media.select(row))
+new Handoff(() => desk.review, async review => {
+  if (desk.hasEdits()) throw new Error('Close this dialog and save or discard your cue edits before opening another review.')
+  await persist(review)
+  openReview(review)
+})
 
 function openReview(review: Review, focus = true): void {
   get('landing').hidden = true
   get('desk').hidden = false
   newReview.hidden = false
+  media.open(review)
   desk.show(review)
   if (dialog.open) dialog.close()
   if (focus) get('main').focus()
@@ -108,9 +117,32 @@ newReview.addEventListener('click', () => {
     return
   }
   mountImport('dialog-import')
+  dialog.querySelector('details')!.open = false
+  get('clear-error').hidden = true
   dialog.showModal()
 })
 get('close-import').addEventListener('click', () => dialog.close())
+const clearButton = get<HTMLButtonElement>('clear-review')
+clearButton.addEventListener('click', async () => {
+  clearButton.disabled = true
+  try {
+    await persist(null)
+    desk.reset()
+    media.clear()
+    dialog.close()
+    get('desk').hidden = newReview.hidden = true
+    get('landing').hidden = false
+    mountImport('landing-import')
+    if (store) announce('')
+    get('main').focus()
+  } catch (error) {
+    const errorLine = get('clear-error')
+    errorLine.textContent = message(error)
+    errorLine.hidden = false
+  } finally {
+    clearButton.disabled = false
+  }
+})
 example.addEventListener('click', async () => {
   example.disabled = true
   try {

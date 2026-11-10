@@ -78,6 +78,13 @@ export class Desk {
     this.renderDetail()
   }
 
+  reset(): void {
+    this.review = this.selected = undefined
+    this.form.hidden = true
+    get('queue').replaceChildren()
+    get('detail').replaceChildren()
+  }
+
   hasEdits(): boolean {
     if (!this.review || !this.selected || this.form.hidden) return false
     const decision = this.review.decisions[this.selected.id]
@@ -278,7 +285,7 @@ export class Desk {
     const dirty = this.hasEdits()
     this.saveButton.disabled = !dirty || this.saving
     this.discard.hidden = !dirty || this.saving
-    if (dirty && !this.saving) this.message.textContent = 'Unsaved edits'
+    if (!this.saving) this.message.textContent = dirty ? 'Unsaved edits' : ''
   }
 
   private async submit(): Promise<void> {

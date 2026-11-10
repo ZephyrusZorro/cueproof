@@ -49,6 +49,7 @@
             <h2>A first look</h2>
             <p>Try a studio orientation clip with wording changes, an inserted sound cue, and a line split.</p>
             <button class="button quiet" id="example" type="button">Open sample <span aria-hidden="true">↗</span></button>
+            <button class="text-button" id="restore-link" type="button">Restore a saved review</button>
           </aside>
         </div>
       </section>
@@ -59,7 +60,7 @@
             <h1>Revision review<span class="title-dot">.</span></h1>
             <div class="file-pair"><span><b>REF</b> <span id="reference-name"></span></span><span class="pair-arrow" aria-hidden="true">→</span><span><b>REV</b> <span id="revision-name"></span></span></div>
           </div>
-          <div id="desk-actions" class="desk-actions"></div>
+          <div class="desk-actions"><button id="open-handoff" class="button primary" type="button">Review handoff <span aria-hidden="true">↗</span></button></div>
         </div>
         <div class="summary" aria-label="Review summary">
           <div><span>Queue</span><strong id="count-total">0</strong></div>
@@ -129,6 +130,36 @@
       </div>
       <p id="replace-note">Opening another pair replaces the active review in this browser.</p>
       <div id="dialog-import"></div>
+      <details class="clear-review">
+        <summary>Clear this workspace</summary>
+        <p>This removes the active review and its decisions from this browser.</p>
+        <button id="clear-review" class="button quiet" type="button">Clear active review</button>
+        <p id="clear-error" class="form-error" role="alert" hidden></p>
+      </details>
+    </dialog>
+    <dialog id="handoff-dialog" aria-labelledby="handoff-title">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Review files</p><h2 id="handoff-title">Review handoff</h2></div>
+        <button class="button small quiet" id="close-handoff" type="button" aria-label="Close handoff">×</button>
+      </div>
+      <section class="handoff-section" id="export-section">
+        <h3>Take the review with you</h3>
+        <p>Use CSV for timecoded feedback. A JSON backup includes both caption tracks and all saved decisions.</p>
+        <div class="handoff-buttons">
+          <button id="download-csv" type="button" class="button primary">Download CSV</button>
+          <button id="download-backup" type="button" class="button quiet">Download backup</button>
+        </div>
+      </section>
+      <section class="handoff-section">
+        <h3>Restore from backup</h3>
+        <p id="restore-explainer"></p>
+        <form id="restore-form">
+          <label for="restore-backup" class="sr-only">Cueproof JSON backup</label>
+          <input id="restore-backup" type="file" accept=".json,application/json" required>
+          <button id="open-backup" type="submit" class="button quiet">Open backup</button>
+          <p id="handoff-error" class="form-error" role="alert" hidden></p>
+        </form>
+      </section>
     </dialog>
     <template id="import-template">
       <form class="import-form">
