@@ -47,3 +47,9 @@ test('handles repeated SRT numbers and hour counts above 99 without renumbering 
   assert.equal(track.source, source)
   assert.equal(formatTime(track.cues[1].start), '100:00:01.500')
 })
+
+test('accepts a literal arrow in SubRip text and still diagnoses a missing cue separator', () => {
+  const source = '1\n00:00:01,000 --> 00:00:02,000\nChoose A --> B on the screen.'
+  assert.equal(parseTrack({ name: 'diagram.srt', source }).cues[0].text, 'Choose A --> B on the screen.')
+  assert.throws(() => parseTrack({ name: 'diagram.srt', source: source + '\n2\n00:00:03,000 --> 00:00:04,000\nNext cue.' }), /separator/)
+})
