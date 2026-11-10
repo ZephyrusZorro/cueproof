@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Compare caption revisions, review what changed, and hand off timecoded notes. Your files stay in your browser.">
+    <meta name="theme-color" content="#f6f5ef">
+    <link rel="icon" href="/cueproof.svg" type="image/svg+xml">
+    <title>Cueproof · Caption revision desk</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to workspace</a>
+    <header class="bar">
+      <div class="bar-inner">
+        <div class="brand"><img src="/cueproof.svg" alt="" width="34" height="34"><span>Cueproof<span class="brand-dot">.</span></span></div>
+        <span class="bar-divider"></span><span class="bar-caption">Caption revision desk</span>
+        <span class="local"><span></span> Local workspace</span>
+        <button id="new-review" class="button quiet" type="button" hidden>New review</button>
+      </div>
+    </header>
+    <main id="main" class="frame" tabindex="-1">
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section id="landing" hidden>
+        <div class="hero">
+          <div class="intro">
+            <p class="eyebrow"><span class="accent-mark"></span> Caption quality control</p>
+            <h1>Catch what<br>changed<span class="title-dot">.</span></h1>
+            <p class="lede">Compare two caption tracks, check the cues that changed, and send back notes with exact timecodes.</p>
+          </div>
+          <div class="schematic" aria-hidden="true">
+            <div class="schematic-top"><span>01 / REVISION DIFF</span><span>00:00:07.200</span></div>
+            <svg class="signal" viewBox="0 0 440 66" preserveAspectRatio="none">
+              <path d="M0 33H440M55 0v66M110 0v66M165 0v66M220 0v66M275 0v66M330 0v66M385 0v66"/>
+              <path class="wave" d="M0 33h15l5-7 6 12 8-17 8 24 7-8 8-4h9l6-17 6 31 8-44 6 52 6-27 9 6h13l7-8 6 19 8-36 7 48 9-29 9 8h20l6-9 8 17 7-23 8 27 7-14 7 2h12l7-20 7 40 8-51 8 44 7-15 8 2h14l6-8 6 15 7-20 6 26 9-15h15l7-12 7 23 9-34 7 42 7-23 7 4h17l7-7 7 12 7-8h17"/>
+              <path class="playhead" d="M165 0v66"/>
+            </svg>
+            <div class="schematic-line"><span>REF</span><p>The studio opens at <del>eight.</del></p></div>
+            <div class="schematic-line rev"><span>REV</span><p>The studio opens at <ins>nine.</ins></p></div>
+            <div class="schematic-bottom"><span>01 TEXT CHANGE</span><span>+240 MS</span></div>
+          </div>
+        </div>
+        <div class="start-grid">
+          <section class="start-card">
+            <div class="start-heading"><span class="index">01</span><div><h2>Start a review</h2><p>Use two versions of the same caption track.</p></div></div>
+            <div id="landing-import"></div>
+          </section>
+          <aside class="example-card">
+            <span class="index">02 / SAMPLE PROJECT</span>
+            <h2>A first look</h2>
+            <p>Try a studio orientation clip with wording changes, an inserted sound cue, and a line split.</p>
+            <button class="button quiet" id="example" type="button">Open sample <span aria-hidden="true">↗</span></button>
+          </aside>
+        </div>
+      </section>
+      <section id="desk" hidden>
+        <div class="desk-heading">
+          <div>
+            <p class="eyebrow"><span class="accent-mark"></span> <span id="desk-kicker">Active review</span></p>
+            <h1>Revision review<span class="title-dot">.</span></h1>
+            <div class="file-pair"><span><b>REF</b> <span id="reference-name"></span></span><span class="pair-arrow" aria-hidden="true">→</span><span><b>REV</b> <span id="revision-name"></span></span></div>
+          </div>
+          <div id="desk-actions" class="desk-actions"></div>
+        </div>
+        <div class="summary" aria-label="Review summary">
+          <div><span>Queue</span><strong id="count-total">0</strong></div>
+          <div><span>Unreviewed</span><strong id="count-pending">0</strong></div>
+          <div><span>Accepted</span><strong id="count-accepted">0</strong></div>
+          <div><span>Needs changes</span><strong id="count-changes">0</strong></div>
+          <div class="summary-progress"><span id="progress-label">Review progress</span><progress id="progress" aria-label="Review progress"></progress></div>
+        </div>
+        <div id="offset-note" class="offset-note" hidden></div>
+        <div class="review-grid">
+          <section class="panel queue-panel" aria-labelledby="queue-title">
+            <div class="panel-header"><div><p class="eyebrow">01 / Navigation</p><h2 id="queue-title">Change queue</h2></div></div>
+            <div class="queue-controls">
+              <label class="sr-only" for="search">Search cues</label>
+              <input id="search" type="search" placeholder="Search cues or timecodes" autocomplete="off">
+              <label class="sr-only" for="filter">Filter rows</label>
+              <select id="filter">
+                <option value="queue">Review queue</option>
+                <option value="pending">Unreviewed</option>
+                <option value="changes">Needs changes</option>
+                <option value="accepted">Accepted</option>
+                <option value="advisories">With advisories</option>
+                <option value="all">All cues</option>
+              </select>
+            </div>
+            <ol id="queue" class="queue"></ol>
+            <div class="queue-footer"><span id="queue-range" aria-live="polite"></span><div><button class="button small quiet" id="prev-page" type="button" aria-label="Previous page">←</button><button class="button small quiet" id="next-page" type="button" aria-label="Next page">→</button></div></div>
+          </section>
+          <section class="panel inspector" id="inspector" aria-labelledby="inspector-title">
+            <div class="panel-header">
+              <div><p class="eyebrow">02 / Evidence</p><h2 id="inspector-title" tabindex="-1">Cue inspector</h2></div>
+              <button id="next-cue" class="button small quiet" type="button" hidden>Next unreviewed <span aria-hidden="true">→</span></button>
+            </div>
+            <div id="player-slot"></div>
+            <div id="detail" class="detail"></div>
+            <form id="decision-form" class="decision" hidden>
+              <div class="decision-fields">
+                <label>Decision
+                  <select id="decision-status">
+                    <option value="pending">Unreviewed</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="changes">Needs changes</option>
+                  </select>
+                </label>
+                <label class="note-label">Note <span>Optional · 500 characters</span>
+                  <textarea id="decision-note" rows="2" maxlength="500" placeholder="What should the editor check?"></textarea>
+                </label>
+              </div>
+              <div class="decision-actions">
+                <button id="save-decision" class="button primary" type="submit">Save decision</button>
+                <button id="discard-decision" class="button quiet" type="button" hidden>Discard edits</button>
+                <span id="decision-message" role="status"></span>
+              </div>
+            </form>
+          </section>
+        </div>
+      </section>
+      <footer class="footer">
+        <span>CUEPROOF / CAPTION REVISION DESK</span>
+        <span>Files stay in this browser <span aria-hidden="true">·</span> <a href="https://github.com/ZephyrusZorro/cueproof">Source &amp; guide</a></span>
+      </footer>
+    </main>
+    <dialog id="import-dialog" aria-labelledby="import-title">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Start fresh</p><h2 id="import-title">New review</h2></div>
+        <button class="button small quiet" id="close-import" type="button" aria-label="Close new review">×</button>
+      </div>
+      <p id="replace-note">Opening another pair replaces the active review in this browser.</p>
+      <div id="dialog-import"></div>
+    </dialog>
+    <template id="import-template">
+      <form class="import-form">
+        <div class="file-tiles">
+          <label class="file-tile">
+            <span class="file-role"><span class="file-glyph" aria-hidden="true">↥</span> Reference track</span>
+            <span class="file-name">Choose or drop a file</span>
+            <input name="reference" type="file" accept=".srt,.vtt,.webvtt" required>
+          </label>
+          <label class="file-tile">
+            <span class="file-role"><span class="file-glyph" aria-hidden="true">↥</span> Revised track</span>
+            <span class="file-name">Choose or drop a file</span>
+            <input name="revision" type="file" accept=".srt,.vtt,.webvtt" required>
+          </label>
+        </div>
+        <div class="import-actions">
+          <button class="button primary" type="submit">Compare tracks <span aria-hidden="true">→</span></button>
+          <span>UTF-8 SRT or WebVTT <span aria-hidden="true">·</span> Up to 2 MiB each</span>
+        </div>
+        <p class="form-error" role="alert" hidden></p>
+      </form>
+    </template>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
