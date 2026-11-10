@@ -1,4 +1,5 @@
-import { compareTracks, type Comparison, type Row } from './compare.ts'
+import { compareTracks } from './compare.ts'
+import { buildFollowUps, captureRequest, MAX_ANCHORS, MAX_REQUESTS, MAX_ROUND, type FollowUpRequest, type ReviewComparison, type ReviewRow } from './followups.ts'
 import { formatTime, parseTrack, rangeEnd, type Cue, type Track, type TrackInput } from './track.ts'
 
 export const MAX_NOTE = 500
@@ -9,17 +10,50 @@ export type Decision = { status: Status; note: string }
 export type Review = {
   reference: Track
   revision: Track
-  comparison: Comparison
+  comparison: ReviewComparison
   decisions: Record<string, Decision>
   example: boolean
+  round: number
 }
 
-export function actionable(row: Row): boolean {
-  return row.changes.length > 0 || row.issues.length > 0
+export function actionable(row: ReviewRow): boolean {
+  return !!row.followUp || row.changes.length > 0 || row.issues.length > 0
 }
 
-export function createReview(reference: Track, revision: Track, example = false): Review {
-  return { reference, revision, comparison: compareTracks(reference, revision), decisions: {}, example }
+export function createReview(
+  reference: Track, revision: Track, example = false, round = 1, requests: FollowUpRequest[] = [],
+): Review {
+  const comparison = compareTracks(reference, revision)
+  if (requests.length) comparison.rows.unshift(...buildFollowUps(requests, reference, revision, comparison))
+  return { reference, revision, comparison, decisions: {}, example, round }
+}
+
+function openRequest(review: Review, row: ReviewRow): boolean {
+  const decision = review.decisions[row.id]
+  return row.followUp ? decision?.status !== 'accepted' : decision?.status === 'changes'
+}
+
+export function outstandingCount(review: Review): number {
+  return review.comparison.rows.filter(row => openRequest(review, row)).length
+}
+
+export function advanceReview(review: Review, revision: Track): Review {
+  if (review.round >= MAX_ROUND) throw new Error('Start a new review to continue after round 9,999.')
+  const open = review.comparison.rows.filter(row => openRequest(review, row))
+  if (open.length > MAX_REQUESTS) {
+    throw new Error('Resolve or export open requests before continuing. A round can carry up to 1,500 requests.')
+  }
+  const requests = open.map(row => {
+    const note = review.decisions[row.id]?.note ?? ''
+    if (!row.followUp) return captureRequest(row, review.round, review.reference, review.revision, note)
+    return {
+      ...row.followUp.request,
+      latestNote: note.trim() ? note : row.followUp.request.latestNote,
+      anchors: row.after.slice(0, MAX_ANCHORS).map(cue => cue.number),
+      tentative: row.after.length > MAX_ANCHORS || (row.after.length > 0 && row.followUp.signal === 'check'),
+    }
+  })
+  return createReview(review.revision, revision, review.example, review.round + 1, requests)
 }
 
 export function decide(review: Review, id: string, status: Status, note: string): Review {
