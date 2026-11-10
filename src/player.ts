@@ -1,11 +1,11 @@
 import { el } from './dom.ts'
-import { activeCaption, playbackWindow } from './media-time.ts'
-import type { Row } from './compare.ts'
+import { activeCaption, playbackAround, playbackWindow } from './media-time.ts'
+import type { ReviewRow } from './followups.ts'
 import type { Review } from './review.ts'
 
 export class MediaPreview {
   private review?: Review
-  private row?: Row
+  private row?: ReviewRow
   private player?: HTMLMediaElement
   private url?: string
   private stopAt?: number
@@ -78,7 +78,7 @@ export class MediaPreview {
     this.review = this.row = undefined
   }
 
-  select(row: Row | undefined): void {
+  select(row: ReviewRow | undefined): void {
     if (this.row !== row && this.stopAt !== undefined) {
       this.stopAt = undefined
       this.player?.pause()
@@ -146,9 +146,18 @@ export class MediaPreview {
   }
 
   private cueWindow(): [number, number] | undefined {
-    if (!this.row || !this.player) return
-    const cues = this.track.value === 'reference' ? this.row.before : this.row.after.length ? this.row.after : this.row.before
+    const cues = this.selectedCues()
+    if (!cues || !this.player) return
+    const request = this.row?.followUp?.request
+    if (!cues.length && request?.kind === 'cue') return playbackAround(request.time, this.player.duration)
     return playbackWindow(cues, this.player.duration)
+  }
+
+  private selectedCues() {
+    if (!this.row) return
+    if (this.track.value === 'reference') return this.row.before
+    if (this.track.value === 'revision') return this.row.after
+    return this.row.after.length ? this.row.after : this.row.before
   }
 
   private update(): void {
@@ -159,7 +168,11 @@ export class MediaPreview {
     this.caption.hidden = !text
     this.caption.dir = 'auto'
     this.play.disabled = !this.cueWindow()
-    this.play.title = this.play.disabled ? 'This cue has no playable range in the attached file.' : 'Play the selected cue with a little context'
+    const around = this.row?.followUp?.request.kind === 'cue' && !this.selectedCues()?.length
+    const label = around ? 'Play around request' : 'Play cue'
+    if (this.play.textContent !== label) this.play.textContent = label
+    this.play.title = this.play.disabled ? 'This item has no playable range in the attached file.'
+      : around ? 'Play around the original request time' : 'Play the selected cue with a little context'
   }
 
   private async playCue(): Promise<void> {

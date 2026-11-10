@@ -1,6 +1,18 @@
 # Verification and release notes
 
-## Review passes
+## Version 2 stage audits
+
+| Stage | Reproduction and correction | Gate |
+| --- | --- | --- |
+| Input | A literal arrow in a valid SRT caption was mistaken for a missing separator. The parser now checks for timing-shaped lines in SRT payloads. | Parser regression, full unit suite and build |
+| Request model | A track-level request initially lost its original presentation excerpt. Preserve the excerpt and keep ambiguous or missing cue requests visible. | Missing, unchanged, split/merge, repeated wording, track metadata, and human-resolution tests |
+| Storage and exports | An early round-trip dropped follow-up rows, and saving a decision could not retain an archive. The v2 codec now validates request identities and restores their evidence. The IndexedDB write handles both snapshots atomically. | Legacy backup, malformed links, CSV evidence and stale transaction tests |
+| Review desk | Tested incomplete edits, invalid returned files, modal dismissal during reads, mobile focus, retained media, and previous-round downloads. Added a returned sample so new reviewers can try the full workflow. | Full Edge suite and automated accessibility checks |
+| Release audit | An independent review reproduced an unchanged nearby repeat being labelled as a return, a tentative match hiding a newly returned cue, loss of linked evidence after repeated splits, and excessive CSV growth. Exact reappearance evidence now requires a newly added or reworded candidate. Expanded links survive within the round limit. Oversized CSVs offer a JSON fallback. | Reproductions passed as regression tests. Also checked canonical backup IDs, unreviewed-row warnings and playback around an original request time. |
+
+The controlled v2 benchmark on Windows and Node 24.20.0 used seven measured runs after one warmup. Comparing two synthetic 2,500-cue tracks took 135.8 ms median. Parsing the returned track, comparing it, carrying 250 requests, and encoding the next backup took 148.8 ms median. Measurements exclude browser rendering, persistence, and playback.
+
+## Baseline review passes
 
 | Pass | Evidence or change |
 | --- | --- |
@@ -24,8 +36,6 @@ npm audit --audit-level=moderate
 ```
 
 On Windows with Edge installed, set `$env:CUEPROOF_BROWSER_CHANNEL='msedge'` before the browser command to use Edge.
-
-The controlled Windows run on Node 24.20.0 parsed and compared two 2,500-cue synthetic tracks in a median of 136.6 ms over seven measured runs after one warmup. The slowest measured run was 305.1 ms. This is a Node benchmark on generated captions. Browser interaction speed depends on device and input, and no competitor performance comparison was made.
 
 ## Scope of evidence
 

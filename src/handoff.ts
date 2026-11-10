@@ -22,6 +22,7 @@ export class Handoff {
   private archive = get<HTMLButtonElement>('download-previous')
   private input = get<HTMLInputElement>('restore-backup')
   private error = get('handoff-error')
+  private exportError = get('export-error')
   private submit = get<HTMLButtonElement>('open-backup')
   private working = false
 
@@ -72,7 +73,7 @@ export class Handoff {
       ? 'Opening a backup replaces ' + replacement + '. Download any rounds you want to keep first.'
       : 'Open a Cueproof JSON backup to restore both tracks and their saved decisions.'
     this.input.value = ''
-    this.error.hidden = true
+    this.error.hidden = this.exportError.hidden = true
     this.dialog.showModal()
   }
 
@@ -80,7 +81,13 @@ export class Handoff {
     const review = this.current()
     if (!review) return
     const stem = review.revision.name.replace(/\.(srt|vtt|webvtt)$/i, '').slice(0, 100)
-    if (kind === 'csv') download(stem + '.handoff.csv', csvReport(review), 'text/csv;charset=utf-8')
-    else download(stem + '.cueproof.json', encodeReview(review), 'application/json')
+    this.exportError.hidden = true
+    try {
+      if (kind === 'csv') download(stem + '.handoff.csv', csvReport(review), 'text/csv;charset=utf-8')
+      else download(stem + '.cueproof.json', encodeReview(review), 'application/json')
+    } catch (error) {
+      this.exportError.textContent = error instanceof Error ? error.message : 'Could not download the review.'
+      this.exportError.hidden = false
+    }
   }
 }

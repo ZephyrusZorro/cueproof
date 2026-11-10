@@ -4,7 +4,7 @@ import type { Cue, Track } from './track.ts'
 export const MAX_REQUESTS = 1500
 export const MAX_ROUND = 9999
 export const MAX_EXCERPT = 240
-export const MAX_ANCHORS = 12
+export const MAX_LINKS = 15_000
 export const RETURN_WINDOW_MS = 4000
 
 export const signals = {
@@ -61,7 +61,7 @@ export function captureRequest(row: Row, round: number, reference: Track, revisi
   }
 }
 
-function linkedEvidence(request: FollowUpRequest, reference: Track, revision: Track, matches: Map<number, Row>) {
+function linkedEvidence(request: FollowUpRequest, reference: Track, matches: Map<number, Row>, newWording: Map<string, Cue[]>) {
   const before = request.anchors.map(number => reference.cues[number - 1])
   const rows = new Set(request.anchors.map(number => matches.get(number)).filter(row => row !== undefined))
   const afterByNumber = new Map<number, Cue>()
@@ -72,27 +72,37 @@ function linkedEvidence(request: FollowUpRequest, reference: Track, revision: Tr
     signal = [...rows].some(row => !row.after.length || row.match === 'timing') || request.tentative
       ? 'check'
       : [...rows].some(row => row.changes.length) ? 'changed' : 'unchanged'
-  } else if (!before.length && request.exact) {
-    const candidates = revision.cues.filter(cue =>
-      Math.abs(cue.start - request.time) <= RETURN_WINDOW_MS && cue.text === request.excerpt)
+  }
+  if ((!after.length || signal === 'check') && request.exact && !after.some(cue => cue.text === request.excerpt)) {
+    const candidates = (newWording.get(request.excerpt) ?? []).filter(cue =>
+      Math.abs(cue.start - request.time) <= RETURN_WINDOW_MS)
     if (candidates.length === 1) {
       after = candidates
-      signal = 'returned'
+      signal = before.length ? 'check' : 'returned'
     } else if (candidates.length > 1) signal = 'check'
   }
   return { before, after, signal }
 }
 
 export function buildFollowUps(
-  requests: FollowUpRequest[], reference: Track, revision: Track, comparison: Comparison,
+  requests: FollowUpRequest[], reference: Track, comparison: Comparison,
 ): ReviewRow[] {
   const matches = new Map<number, Row>()
-  for (const row of comparison.rows) for (const cue of row.before) matches.set(cue.number, row)
+  const newWording = new Map<string, Cue[]>()
+  for (const row of comparison.rows) {
+    for (const cue of row.before) matches.set(cue.number, row)
+    for (const cue of row.after) {
+      if (row.before.some(before => before.text === cue.text)) continue
+      const entries = newWording.get(cue.text) ?? []
+      entries.push(cue)
+      newWording.set(cue.text, entries)
+    }
+  }
   const metadataChanged = comparison.rows.some(row => row.id === 'track')
   return requests.map(request => {
     const evidence = request.kind === 'track'
       ? { before: [], after: [], signal: metadataChanged ? 'changed' as const : 'unchanged' as const }
-      : linkedEvidence(request, reference, revision, matches)
+      : linkedEvidence(request, reference, matches, newWording)
     return {
       id: 'followup:' + request.id,
       before: evidence.before, after: evidence.after, changes: [], match: 'none', issues: [],

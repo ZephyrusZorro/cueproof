@@ -129,7 +129,7 @@
         </div>
       </section>
       <footer class="footer">
-        <span>CUEPROOF / CAPTION REVISION DESK</span>
+        <span>CUEPROOF 2.0 / CAPTION REVISION DESK</span>
         <span>Files stay in this browser <span aria-hidden="true">·</span> <a href="https://github.com/ZephyrusZorro/cueproof">Source &amp; guide</a></span>
       </footer>
     </main>
@@ -152,9 +152,10 @@
         <div><p class="eyebrow" id="next-round-label"></p><h2 id="next-title">Check next revision</h2></div>
         <button class="button small quiet" id="close-next" type="button" aria-label="Close next revision">×</button>
       </div>
-      <p>Use the editor’s returned caption track for the same video. This round’s revision becomes the next reference.</p>
+      <p>Choose the returned caption track for the same video and language. This round’s revision becomes the next reference.</p>
       <div class="next-summary">
         <strong id="next-request-count"></strong>
+        <p id="next-pending-note" hidden></p>
         <p id="next-archive-note"></p>
       </div>
       <form id="next-form">
@@ -184,6 +185,7 @@
           <button id="download-backup" type="button" class="button quiet">Download backup</button>
         </div>
         <button id="download-previous" type="button" class="text-button archive-button" hidden>Download previous round backup</button>
+        <p id="export-error" class="form-error" role="alert" hidden></p>
       </section>
       <section class="handoff-section">
         <h3>Restore from backup</h3>

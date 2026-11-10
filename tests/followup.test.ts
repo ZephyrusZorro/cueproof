@@ -73,6 +73,59 @@ test('keeps unlinked requests and never guesses among repeated reappearances', (
   assert.equal(items[2].time, 7000)
 })
 
+test('an existing nearby repetition is never mistaken for a returned cue', () => {
+  const reference = track('before.vtt', [[1000,2000,'[Door slams]'],[3000,4000,'[Door slams]']])
+  const revision = track('after.vtt', [[3000,4000,'[Door slams]']])
+  const review = decide(createReview(reference, revision), '1:0', 'changes', 'Restore the first door sound.')
+  const unchanged = advanceReview(review, revision)
+  assert.equal(unchanged.comparison.rows[0].followUp?.signal, 'missing')
+  assert.deepEqual(unchanged.comparison.rows[0].after, [])
+  const restored = advanceReview(unchanged, reference)
+  assert.equal(restored.comparison.rows[0].followUp?.signal, 'returned')
+  assert.deepEqual(restored.comparison.rows[0].after.map(cue => cue.start), [1000])
+})
+
+test('a tentative anchor yields to newly returned exact wording', () => {
+  const reference = track('before.vtt', [[1000,2000,'Original wording.']])
+  const alarm = track('alarm.vtt', [[1000,2000,'[Alarm rings]']])
+  const review = decide(createReview(reference, alarm), '1:1', 'changes', 'Check the alarm caption.')
+  const speech = track('speech.vtt', [[1000,2000,'We will begin now.']])
+  const tentative = advanceReview(review, speech)
+  assert.equal(tentative.comparison.rows[0].followUp?.signal, 'check')
+  const returned = track('returned.vtt', [[1000,2000,'We will begin now.'],[2500,3500,'[Alarm rings]']])
+  const result = advanceReview(tentative, returned)
+  assert.equal(result.comparison.rows[0].followUp?.signal, 'check')
+  assert.deepEqual(result.comparison.rows[0].after.map(cue => cue.text), ['[Alarm rings]'])
+})
+
+test('keeps all linked cues when a request is repeatedly split', () => {
+  const words = Array.from({ length: 32 }, (_, index) => 'word' + (index + 1))
+  const split = (size: number) => track('split.vtt', words.flatMap((_, index) => index % size === 0
+    ? [[1000 + index * 1000, 1000 + (index + size) * 1000, words.slice(index, index + size).join(' ')] as [number, number, string]]
+    : []))
+  const reference = track('original.vtt', [[1000,33000,'Original wording.']])
+  let review = decide(createReview(reference, split(32)), '1:1', 'changes', 'Check all words after splitting.')
+  for (const size of [16, 8, 4, 2, 1, 1]) review = advanceReview(review, split(size))
+  const row = review.comparison.rows[0]
+  assert.equal(row.before.length, 32)
+  assert.equal(row.after.length, 32)
+  assert.equal(row.followUp?.signal, 'unchanged')
+  assert.deepEqual(decodeReview(encodeReview(review)), review)
+})
+
+test('oversized repeated CSV evidence fails with a recoverable error', () => {
+  const source = 'WEBVTT\n\nNOTE ' + 'A'.repeat(210_000) + '\n\n00:01.000 --> 00:03.000\nHi.'
+  const reference = parseTrack({name:'reference.vtt', source})
+  const revision = parseTrack({name:'revision.vtt', source})
+  const requests = Array.from({length:80}, (_, index) => ({
+    id: (index + 1) + '/track', kind: 'track' as const, sourceName: revision.name,
+    time: 0, excerpt: '', exact: false, note: '', latestNote: '', anchors: [], tentative: false,
+  }))
+  const review = createReview(reference, revision, false, 81, requests)
+  assert.throws(() => csvReport(review), /CSV.*32 MiB.*JSON/)
+  assert.deepEqual(decodeReview(encodeReview(review)), review)
+})
+
 test('carries track-level presentation requests and compares new metadata', () => {
   const before = track('before.vtt', [[1000, 3000, 'Hi.']])
   const changed = parseTrack({ ...before, name: 'after.vtt', source: before.source.replace('WEBVTT\n\n', 'WEBVTT\n\nSTYLE\n::cue { color: red }\n\n') })
@@ -99,5 +152,6 @@ test('rejects malformed or duplicate v2 links without applying decisions', () =>
   for (const requests of [
     [{ ...request, anchors: [9999] }], [{ ...request, anchors: [1, 1] }],
     [{ ...request, id: '2/1:0' }], [request, request], [{ ...request, note: 1 }],
+    [request, { ...request, id: '1/01:0' }],
   ]) assert.throws(() => decodeReview(JSON.stringify({ ...backup, requests })), /follow-up/)
 })

@@ -1,7 +1,7 @@
 import { get } from './dom.ts'
 import { sampleReturnFile } from './example.ts'
 import { captionPicker } from './picker.ts'
-import { advanceReview, outstandingCount, type Review } from './review.ts'
+import { actionable, advanceReview, outstandingCount, type Review } from './review.ts'
 import { readTrack } from './track.ts'
 
 export class NextRound {
@@ -41,8 +41,14 @@ export class NextRound {
     const review = this.current()
     if (!review || !this.canAdvance()) return
     const count = outstandingCount(review)
+    const pending = review.comparison.rows.filter(row =>
+      !row.followUp && actionable(row) && (review.decisions[row.id]?.status ?? 'pending') === 'pending').length
     get('next-round-label').textContent = 'Round ' + review.round + ' → ' + (review.round + 1)
     get('next-request-count').textContent = count === 1 ? '1 request will carry forward' : count + ' requests will carry forward'
+    const pendingNote = get('next-pending-note')
+    pendingNote.hidden = !pending
+    pendingNote.textContent = (pending === 1 ? '1 unreviewed item stays' : pending + ' unreviewed items stay')
+      + ' in this round’s backup. Mark any item that needs to carry forward as Needs changes.'
     get('next-archive-note').textContent = this.previousExists()
       ? 'This round replaces the previous-round backup in this browser. Download older rounds from Review handoff to keep them.'
       : 'The current round will remain available to download from Review handoff.'

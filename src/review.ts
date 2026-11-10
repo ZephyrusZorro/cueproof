@@ -1,12 +1,13 @@
 import { compareTracks } from './compare.ts'
 import {
-  buildFollowUps, captureRequest, isTrackDetails, MAX_ANCHORS, MAX_EXCERPT, MAX_REQUESTS,
+  buildFollowUps, captureRequest, isTrackDetails, MAX_LINKS, MAX_EXCERPT, MAX_REQUESTS,
   MAX_ROUND, originRound, signals, type FollowUpRequest, type ReviewComparison, type ReviewRow,
 } from './followups.ts'
 import { formatTime, MAX_CUES, parseTrack, rangeEnd, type Cue, type Track, type TrackInput } from './track.ts'
 
 export const MAX_NOTE = 500
 export const MAX_BACKUP_BYTES = 64 * 1024 * 1024
+const MAX_CSV_BYTES = 32 * 1024 * 1024
 export const labels = { pending: 'Unreviewed', accepted: 'Accepted', changes: 'Needs changes' } as const
 export type Status = keyof typeof labels
 export function decisionLabel(row: ReviewRow, status: Status): string {
@@ -32,7 +33,7 @@ export function createReview(
   reference: Track, revision: Track, example = false, round = 1, requests: FollowUpRequest[] = [],
 ): Review {
   const comparison = compareTracks(reference, revision)
-  if (requests.length) comparison.rows.unshift(...buildFollowUps(requests, reference, revision, comparison))
+  if (requests.length) comparison.rows.unshift(...buildFollowUps(requests, reference, comparison))
   return { reference, revision, comparison, decisions: {}, example, round }
 }
 
@@ -49,7 +50,7 @@ export function advanceReview(review: Review, revision: Track): Review {
   if (review.round >= MAX_ROUND) throw new Error('Start a new review to continue after round 9,999.')
   const open = review.comparison.rows.filter(row => openRequest(review, row))
   if (open.length > MAX_REQUESTS) {
-    throw new Error('Resolve or export open requests before continuing. A round can carry up to 1,500 requests.')
+    throw new Error('A round can carry up to 1,500 requests. Resolve some requests, or download a backup and start a fresh review.')
   }
   const requests = open.map(row => {
     const note = review.decisions[row.id]?.note ?? ''
@@ -57,10 +58,13 @@ export function advanceReview(review: Review, revision: Track): Review {
     return {
       ...row.followUp.request,
       latestNote: note.trim() ? note : row.followUp.request.latestNote,
-      anchors: row.after.slice(0, MAX_ANCHORS).map(cue => cue.number),
-      tentative: row.after.length > MAX_ANCHORS || (row.after.length > 0 && row.followUp.signal === 'check'),
+      anchors: row.after.map(cue => cue.number),
+      tentative: row.after.length > 0 && row.followUp.signal === 'check',
     }
   })
+  if (requests.reduce((total, request) => total + request.anchors.length, 0) > MAX_LINKS) {
+    throw new Error('These requests link to too many cues to carry into a single round. Download a backup before starting a fresh review.')
+  }
   return createReview(review.revision, revision, review.example, review.round + 1, requests)
 }
 
@@ -104,10 +108,11 @@ function parseRequests(value: unknown, round: number, cues: number): FollowUpReq
   const invalid = () => new Error('The backup contains invalid follow-up evidence.')
   if (!Array.isArray(value) || value.length > MAX_REQUESTS) throw invalid()
   const ids = new Set<string>()
+  let links = 0
   return value.map(entry => {
     if (!record(entry)) throw invalid()
     const { id, kind, sourceName, time, excerpt, exact, note, latestNote, anchors, tentative } = entry
-    const key = typeof id === 'string' ? /^([1-9]\d{0,3})\/(track|(\d{1,4}):(\d{1,4}))$/.exec(id) : null
+    const key = typeof id === 'string' ? /^([1-9]\d{0,3})\/(track|(0|[1-9]\d{0,3}):(0|[1-9]\d{0,3}))$/.exec(id) : null
     if (typeof id !== 'string' || !key || ids.has(id) || Number(key[1]) >= round
       || (kind !== 'track' && kind !== 'cue') || (kind === 'track') !== (key[2] === 'track')
       || (kind === 'cue' && (Number(key[3]) > MAX_CUES || Number(key[4]) > MAX_CUES || !(Number(key[3]) || Number(key[4]))))
@@ -115,10 +120,12 @@ function parseRequests(value: unknown, round: number, cues: number): FollowUpReq
       || !integer(time, 0, 3_600_000_000_000) || typeof excerpt !== 'string' || excerpt.length > MAX_EXCERPT
       || typeof exact !== 'boolean' || (exact && (kind !== 'cue' || !excerpt.trim()))
       || typeof note !== 'string' || note.length > MAX_NOTE || typeof latestNote !== 'string' || latestNote.length > MAX_NOTE
-      || typeof tentative !== 'boolean' || !Array.isArray(anchors) || anchors.length > MAX_ANCHORS
+      || typeof tentative !== 'boolean' || !Array.isArray(anchors) || anchors.length > cues
       || (kind === 'track' && anchors.length) || (tentative && !anchors.length)
       || anchors.some((anchor, index) => !integer(anchor, index ? anchors[index - 1] + 1 : 1, cues))) throw invalid()
     ids.add(id)
+    links += anchors.length
+    if (links > MAX_LINKS) throw invalid()
     return { id, kind, sourceName, time, excerpt, exact, note, latestNote, anchors, tentative }
   })
 }
@@ -169,11 +176,15 @@ export function csvReport(review: Review): string {
     'Cue ' + cue.number, formatTime(cue.start) + ' → ' + formatTime(cue.end),
     track.format === 'vtt' && cue.id ? 'ID ' + cue.id : '', cue.settings,
   ].filter(Boolean).join(' · ')).join('\n')
-  const rows = review.comparison.rows.filter(actionable).map(row => {
+  const encoder = new TextEncoder()
+  const rows = ['\uFEFF' + header.map(csvCell).join(',') + '\r\n']
+  let bytes = encoder.encode(rows[0]).length
+  for (const row of review.comparison.rows) {
+    if (!actionable(row)) continue
     const decision = review.decisions[row.id]
     const request = row.followUp?.request
     const metadata = (track: Track) => [track.format.toUpperCase(), ...track.metadata].join('\n\n')
-    return [
+    const line = [
       csvCell(review.reference.name), csvCell(review.revision.name), csvCell(row.id),
       csvCell(row.followUp ? 'Follow-up' : row.changes.join(', ') || 'Advisory'),
       ...range(row.before).map(csvCell), ...range(row.after).map(csvCell),
@@ -187,7 +198,10 @@ export function csvReport(review: Review): string {
       csvCell(request?.kind === 'cue' ? formatTime(request.time) : ''), csvCell(request?.excerpt ?? ''),
       csvCell(request?.note ?? ''), csvCell(request?.latestNote ?? ''),
       csvCell(row.followUp ? signals[row.followUp.signal] : ''),
-    ].join(',')
-  })
-  return '\uFEFF' + [header.map(csvCell).join(','), ...rows].join('\r\n') + '\r\n'
+    ].join(',') + '\r\n'
+    bytes += encoder.encode(line).length
+    if (bytes > MAX_CSV_BYTES) throw new Error('This CSV would exceed 32 MiB. Download the JSON backup to keep all review evidence.')
+    rows.push(line)
+  }
+  return rows.join('')
 }

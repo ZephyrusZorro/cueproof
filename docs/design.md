@@ -1,5 +1,7 @@
 # Cueproof product design
 
+The first release established the desk and handoff workflow. [Version 2 adds follow-up rounds and a downloadable previous-round backup.](v2-plan.md)
+
 Independent video editors, communications staff, and accessibility reviewers often receive a revised caption file shortly before publication. Cueproof makes that handoff inspectable. Open an approved or earlier track and the incoming revision, review the change queue against the source media when available, and return a timecoded action list.
 
 ## Experience

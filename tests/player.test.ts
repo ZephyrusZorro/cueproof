@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { activeCaption, playbackWindow } from '../src/media-time.ts'
+import { activeCaption, playbackAround, playbackWindow } from '../src/media-time.ts'
 import { parseTrack } from '../src/track.ts'
 
 const cues = parseTrack({name:'preview.vtt',source:
@@ -21,4 +21,11 @@ test('plays cue with bounded preroll and postroll within the attached media', ()
   assert.equal(playbackWindow([], 6), undefined)
   assert.equal(playbackWindow(cues, NaN), undefined)
   assert.deepEqual(playbackWindow(cues, Infinity), [0.65, 4.5])
+})
+
+test('plays around the original request time when the caption is missing', () => {
+  assert.deepEqual(playbackAround(1000, 6), [0.25, 3])
+  assert.deepEqual(playbackAround(200, 1.4), [0, 1.4])
+  assert.equal(playbackAround(2000, 2), undefined)
+  assert.equal(playbackAround(2000, NaN), undefined)
 })

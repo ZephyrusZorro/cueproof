@@ -131,3 +131,34 @@ test('built-in sample can demonstrate the follow-up loop without external files'
   await expect(page.locator('#detail')).toContainText('Matching wording returned')
   await expect(page.getByLabel('Decision', { exact: true })).toHaveValue('pending')
 })
+
+test('advances a v1 backup and plays around the original time of an unlinked request', async ({ page }) => {
+  await page.goto('/')
+  const original = 'WEBVTT\n\n00:01.000 --> 00:02.000\n[Alarm rings]\n\n00:05.000 --> 00:07.000\nOpening remarks.'
+  const revision = 'WEBVTT\n\n00:05.000 --> 00:07.000\nIntroductions.'
+  const legacy = {
+    version: 1, example: false,
+    reference: { name: 'before.vtt', source: original },
+    revision: { name: 'revision.vtt', source: revision },
+    decisions: { '1:0': { status: 'changes', note: 'Restore the alarm.' } },
+  }
+  await page.getByRole('button', { name: 'Restore a saved review' }).click()
+  await page.getByLabel('Cueproof JSON backup').setInputFiles({
+    name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacy)),
+  })
+  await page.getByRole('button', { name: 'Open backup' }).click()
+  await expect(page.locator('#desk-kicker')).toContainText('Round 1')
+  await expect(page.locator('#count-changes')).toHaveText('1')
+  await page.getByLabel('Attach local audio or video').setInputFiles({ name: 'clip.wav', mimeType: 'audio/wav', buffer: wav() })
+  await page.getByRole('button', { name: 'Check next revision' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Check next revision' })
+  await expect(dialog).toContainText('1 unreviewed item stays in this round’s backup')
+  await dialog.locator('input[type=file]').setInputFiles({
+    name: 'returned.vtt', mimeType: 'text/vtt', buffer: Buffer.from(revision),
+  })
+  await dialog.getByRole('button', { name: 'Start next round' }).click()
+  await expect(page.locator('#detail')).toContainText('No linked cue found')
+  await page.getByRole('button', { name: 'Play around request' }).click()
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.currentTime)).toBeGreaterThan(0.25)
+  await expect(page.getByLabel('Decision', { exact: true })).toHaveValue('pending')
+})
