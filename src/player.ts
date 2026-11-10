@@ -62,10 +62,15 @@ export class MediaPreview {
     this.clear()
   }
 
-  open(review: Review): void {
-    this.clear()
+  open(review: Review, keepMedia = false): void {
+    if (keepMedia) {
+      this.stopAt = undefined
+      this.player?.pause()
+    } else this.clear()
     this.track.value = 'revision'
     this.review = review
+    this.row = undefined
+    this.update()
   }
 
   reset(): void {

@@ -47,7 +47,7 @@
           <aside class="example-card">
             <span class="index">02 / SAMPLE PROJECT</span>
             <h2>A first look</h2>
-            <p>Try a studio orientation clip with wording changes, an inserted sound cue, and a line split.</p>
+            <p>Try a studio orientation clip, then check a returned track that restores a missing sound cue.</p>
             <button class="button quiet" id="example" type="button">Open sample <span aria-hidden="true">↗</span></button>
             <button class="text-button" id="restore-link" type="button">Restore a saved review</button>
           </aside>
@@ -60,7 +60,10 @@
             <h1>Revision review<span class="title-dot">.</span></h1>
             <div class="file-pair"><span><b>REF</b> <span id="reference-name"></span></span><span class="pair-arrow" aria-hidden="true">→</span><span><b>REV</b> <span id="revision-name"></span></span></div>
           </div>
-          <div class="desk-actions"><button id="open-handoff" class="button primary" type="button">Review handoff <span aria-hidden="true">↗</span></button></div>
+          <div class="desk-actions">
+            <button id="open-handoff" class="button quiet" type="button">Review handoff <span aria-hidden="true">↗</span></button>
+            <button id="next-round" class="button primary" type="button">Check next revision <span aria-hidden="true">→</span></button>
+          </div>
         </div>
         <div class="summary" aria-label="Review summary">
           <div><span>Queue</span><strong id="count-total">0</strong></div>
@@ -68,6 +71,10 @@
           <div><span>Accepted</span><strong id="count-accepted">0</strong></div>
           <div><span>Needs changes</span><strong id="count-changes">0</strong></div>
           <div class="summary-progress"><span id="progress-label">Review progress</span><progress id="progress" aria-label="Review progress"></progress></div>
+        </div>
+        <div id="followup-summary" class="followup-summary" hidden>
+          <div><strong id="followup-count" role="status"></strong><p>Requests carried forward from earlier rounds.</p></div>
+          <button id="show-followups" class="button quiet small" type="button">Show follow-ups</button>
         </div>
         <div id="offset-note" class="offset-note" hidden></div>
         <div class="review-grid">
@@ -79,6 +86,7 @@
               <label class="sr-only" for="filter">Filter rows</label>
               <select id="filter">
                 <option value="queue">Review queue</option>
+                <option value="follow-ups" id="filter-followups" hidden>Follow-ups</option>
                 <option value="pending">Unreviewed</option>
                 <option value="changes">Needs changes</option>
                 <option value="accepted">Accepted</option>
@@ -134,10 +142,34 @@
       <div id="dialog-import"></div>
       <details class="clear-review">
         <summary>Clear this workspace</summary>
-        <p>This removes the active review and its decisions from this browser.</p>
+        <p>This removes the active and previous rounds from this browser.</p>
         <button id="clear-review" class="button quiet" type="button">Clear active review</button>
         <p id="clear-error" class="form-error" role="alert" hidden></p>
       </details>
+    </dialog>
+    <dialog id="next-dialog" aria-labelledby="next-title">
+      <div class="dialog-heading">
+        <div><p class="eyebrow" id="next-round-label"></p><h2 id="next-title">Check next revision</h2></div>
+        <button class="button small quiet" id="close-next" type="button" aria-label="Close next revision">×</button>
+      </div>
+      <p>Use the editor’s returned caption track for the same video. This round’s revision becomes the next reference.</p>
+      <div class="next-summary">
+        <strong id="next-request-count"></strong>
+        <p id="next-archive-note"></p>
+      </div>
+      <form id="next-form">
+        <label class="file-tile">
+          <span class="file-role"><span class="file-glyph" aria-hidden="true">↥</span> Returned caption track</span>
+          <span class="file-name">Choose or drop a file</span>
+          <input id="next-file" type="file" accept=".srt,.vtt,.webvtt" required>
+        </label>
+        <div class="import-actions">
+          <button id="start-next" class="button primary" type="submit">Start next round</button>
+          <button id="sample-return" class="button quiet" type="button" hidden>Use sample return</button>
+          <span>UTF-8 SRT or WebVTT · Up to 2 MiB</span>
+        </div>
+        <p id="next-error" class="form-error" role="alert" hidden></p>
+      </form>
     </dialog>
     <dialog id="handoff-dialog" aria-labelledby="handoff-title">
       <div class="dialog-heading">
@@ -151,6 +183,7 @@
           <button id="download-csv" type="button" class="button primary">Download CSV</button>
           <button id="download-backup" type="button" class="button quiet">Download backup</button>
         </div>
+        <button id="download-previous" type="button" class="text-button archive-button" hidden>Download previous round backup</button>
       </section>
       <section class="handoff-section">
         <h3>Restore from backup</h3>

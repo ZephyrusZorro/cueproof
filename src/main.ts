@@ -3,6 +3,8 @@ import { Desk } from './desk.ts'
 import { get } from './dom.ts'
 import { exampleReview } from './example.ts'
 import { Handoff } from './handoff.ts'
+import { NextRound } from './next-round.ts'
+import { captionPicker } from './picker.ts'
 import { MediaPreview } from './player.ts'
 import { createReview, decodeReview, encodeReview, type Review } from './review.ts'
 import { ReviewStore } from './storage.ts'
@@ -10,6 +12,7 @@ import { readTrack } from './track.ts'
 
 let store: ReviewStore | undefined
 let token: string | null = null
+let previousRound: string | null = null
 let writing = false
 let replacing = false
 const notice = get('notice')
@@ -33,11 +36,17 @@ function announce(text: string): void {
   notice.hidden = !text
 }
 
-async function persist(review: Review | null): Promise<void> {
+async function persist(review: Review | null, previous?: string | null): Promise<void> {
   if (writing) throw new Error('A save is already in progress. Try again in a moment.')
   writing = true
   try {
-    if (store) token = (await store.write(review ? encodeReview(review) : null, token)).token
+    if (store) {
+      const saved = await store.write(review ? encodeReview(review) : null, token, previous)
+      token = saved.token
+      previousRound = saved.previous ?? null
+    } else if (!review || previous !== undefined) {
+      previousRound = previous ?? null
+    }
   } finally {
     writing = false
   }
@@ -45,18 +54,28 @@ async function persist(review: Review | null): Promise<void> {
 
 const media = new MediaPreview(get('player-slot'))
 const desk = new Desk(persist, row => media.select(row))
-new Handoff(() => desk.review, async review => {
+new Handoff(() => desk.review, () => previousRound, async review => {
   if (desk.hasEdits()) throw new Error('Close this dialog and save or discard your cue edits before opening another review.')
-  await persist(review)
+  await persist(review, null)
   openReview(review)
 })
+new NextRound(() => desk.review, () => !!previousRound, () => {
+  if (!desk.hasEdits()) return true
+  announce('Save or discard your cue edits before starting the next round.')
+  get('decision-status').focus()
+  return false
+}, async (review, next) => {
+  await persist(next, encodeReview(review))
+  openReview(next, false, true)
+})
 
-function openReview(review: Review, focus = true): void {
+function openReview(review: Review, focus = true, keepMedia = false): void {
   get('landing').hidden = true
   get('desk').hidden = false
   newReview.hidden = false
-  media.open(review)
+  media.open(review, keepMedia)
   desk.show(review)
+  if (store) announce('')
   if (dialog.open) dialog.close()
   if (focus) get('main').focus()
 }
@@ -68,30 +87,7 @@ function mountImport(target: string): void {
   const submit = form.querySelector<HTMLButtonElement>('button[type=submit]')!
   const errorLine = form.querySelector<HTMLElement>('.form-error')!
 
-  for (const input of inputs) {
-    const label = input.closest('label')!
-    const name = label.querySelector('.file-name')!
-    const update = () => {
-      const file = input.files?.[0]
-      name.textContent = file?.name ?? 'Choose or drop a file'
-      label.classList.toggle('has-file', !!file)
-    }
-    input.addEventListener('change', update)
-    input.addEventListener('dragover', event => {
-      event.preventDefault()
-      if (!submit.disabled) label.classList.add('dragging')
-    })
-    input.addEventListener('dragleave', () => label.classList.remove('dragging'))
-    input.addEventListener('drop', event => {
-      event.preventDefault()
-      label.classList.remove('dragging')
-      if (submit.disabled || !event.dataTransfer?.files.length) return
-      const transfer = new DataTransfer()
-      transfer.items.add(event.dataTransfer.files[0])
-      input.files = transfer.files
-      update()
-    })
-  }
+  inputs.forEach(captionPicker)
   form.addEventListener('submit', async event => {
     event.preventDefault()
     const [reference, revision] = inputs.map(input => input.files?.[0])
@@ -105,7 +101,7 @@ function mountImport(target: string): void {
     try {
       const [before, after] = await Promise.all([readTrack(reference), readTrack(revision)])
       const review = createReview(before, after)
-      await persist(review)
+      await persist(review, null)
       openReview(review)
     } catch (error) {
       errorLine.textContent = message(error)
@@ -127,6 +123,9 @@ newReview.addEventListener('click', () => {
     return
   }
   mountImport('dialog-import')
+  get('replace-note').textContent = previousRound
+    ? 'Opening another pair replaces the active review and previous-round backup in this browser.'
+    : 'Opening another pair replaces the active review in this browser.'
   dialog.querySelector('details')!.open = false
   get('clear-error').hidden = true
   dialog.showModal()
@@ -161,7 +160,7 @@ example.addEventListener('click', async () => {
   example.disabled = true
   try {
     const review = exampleReview()
-    await persist(review)
+    await persist(review, null)
     openReview(review)
   } catch (error) {
     announce(message(error))
@@ -179,6 +178,7 @@ async function start(): Promise<void> {
     store = await ReviewStore.open()
     const snapshot = await store.load()
     token = snapshot?.token ?? null
+    previousRound = typeof snapshot?.previous === 'string' ? snapshot.previous : null
     if (snapshot?.content) {
       openReview(decodeReview(snapshot.content), false)
       return

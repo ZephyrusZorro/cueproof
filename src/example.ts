@@ -63,3 +63,11 @@ export function exampleReview() {
     true,
   )
 }
+
+export function sampleReturnFile(): File {
+  const source = revision.replace(
+    '00:17.000 --> 00:20.000',
+    '00:14.000 --> 00:16.500\n[Air conditioner humming]\n\n00:17.000 --> 00:20.000',
+  )
+  return new File([source], 'studio-orientation.returned.vtt', { type: 'text/vtt' })
+}

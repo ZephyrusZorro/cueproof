@@ -19,18 +19,24 @@ export class Handoff {
   private dialog = get<HTMLDialogElement>('handoff-dialog')
   private csv = get<HTMLButtonElement>('download-csv')
   private backup = get<HTMLButtonElement>('download-backup')
+  private archive = get<HTMLButtonElement>('download-previous')
   private input = get<HTMLInputElement>('restore-backup')
   private error = get('handoff-error')
   private submit = get<HTMLButtonElement>('open-backup')
   private working = false
 
-  constructor(private current: Current, open: Open) {
+  constructor(private current: Current, private previous: () => string | null, open: Open) {
     get('open-handoff').addEventListener('click', () => this.show())
     get('restore-link').addEventListener('click', () => this.show())
     get('close-handoff').addEventListener('click', () => { if (!this.working) this.dialog.close() })
     this.dialog.addEventListener('cancel', event => { if (this.working) event.preventDefault() })
     this.csv.addEventListener('click', () => this.export('csv'))
     this.backup.addEventListener('click', () => this.export('json'))
+    this.archive.addEventListener('click', () => {
+      const snapshot = this.previous()
+      const review = this.current()
+      if (snapshot && review) download('cueproof.round-' + (review.round - 1) + '.json', snapshot, 'application/json')
+    })
     get('restore-form').addEventListener('submit', async event => {
       event.preventDefault()
       const file = this.input.files?.[0]
@@ -60,8 +66,10 @@ export class Handoff {
   private show(): void {
     const review = this.current()
     get('export-section').hidden = !review
+    this.archive.hidden = !this.previous()
+    const replacement = this.previous() ? 'the active review and the previous-round backup' : 'the active review'
     get('restore-explainer').textContent = review
-      ? 'Opening a backup replaces the active review. Download a backup of this review first if you need it.'
+      ? 'Opening a backup replaces ' + replacement + '. Download any rounds you want to keep first.'
       : 'Open a Cueproof JSON backup to restore both tracks and their saved decisions.'
     this.input.value = ''
     this.error.hidden = true

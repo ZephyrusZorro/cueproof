@@ -69,7 +69,7 @@ test('imports real tracks, plays selected audio, saves, exports and restores', a
   await page.getByRole('button', { name: 'Open backup' }).click()
   await expect(page.locator('#count-changes')).toHaveText('1')
   expect(errors).toEqual([])
-  expect(requests.filter(url => !url.startsWith('http://127.0.0.1:4186/') && !url.startsWith('blob:'))).toEqual([])
+  expect(requests.filter(url => !url.startsWith(new URL(page.url()).origin + '/') && !url.startsWith('blob:'))).toEqual([])
   expect(requests.some(url => url.endsWith('/evil'))).toBe(false)
 })
 

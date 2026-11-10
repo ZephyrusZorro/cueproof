@@ -1,6 +1,7 @@
-import { inlineDiff, type Row } from './compare.ts'
+import { inlineDiff } from './compare.ts'
 import { get, el } from './dom.ts'
-import { actionable, decide, labels, type Review, type Status } from './review.ts'
+import { isTrackDetails, MAX_EXCERPT, originRound, signals, type ReviewRow } from './followups.ts'
+import { actionable, decide, decisionLabel, type Review, type Status } from './review.ts'
 import { formatTime, rangeEnd, type Cue } from './track.ts'
 
 const PAGE_SIZE = 24
@@ -9,7 +10,8 @@ export function signedMs(value: number): string {
   return (value > 0 ? '+' : value < 0 ? '−' : '') + Math.abs(value) + ' ms'
 }
 
-function rowLabels(row: Row): string[] {
+function rowLabels(row: ReviewRow): string[] {
+  if (row.followUp) return ['Follow-up']
   return row.changes.length ? row.changes : row.issues.length ? ['Advisory'] : ['Unchanged']
 }
 
@@ -26,11 +28,11 @@ function tag(text: string, style = '') {
 }
 
 type Save = (review: Review) => Promise<void>
-type OnSelection = (row: Row | undefined) => void
+type OnSelection = (row: ReviewRow | undefined) => void
 
 export class Desk {
   review?: Review
-  selected?: Row
+  selected?: ReviewRow
   private page = 0
   private saving = false
   private search = get<HTMLInputElement>('search')
@@ -47,6 +49,12 @@ export class Desk {
     const refresh = () => this.showPage(0)
     this.search.addEventListener('input', refresh)
     this.filter.addEventListener('change', refresh)
+    get('show-followups').addEventListener('click', () => {
+      this.filter.value = 'follow-ups'
+      this.search.value = ''
+      refresh()
+      this.filter.focus()
+    })
     get('prev-page').addEventListener('click', () => this.showPage(this.page - 1))
     get('next-page').addEventListener('click', () => this.showPage(this.page + 1))
     this.nextCue.addEventListener('click', () => this.advance())
@@ -64,17 +72,21 @@ export class Desk {
     this.page = 0
     this.search.value = ''
     this.filter.value = 'queue'
-    this.selected = review.comparison.rows.find(actionable) ?? review.comparison.rows[0]
+    const rows = review.comparison.rows
+    this.selected = rows.find(row => actionable(row) && (review.decisions[row.id]?.status ?? 'pending') === 'pending')
+      ?? rows.find(actionable) ?? rows[0]
     get('reference-name').textContent = review.reference.name
     get('revision-name').textContent = review.revision.name
-    get('desk-kicker').textContent = review.example ? 'Sample project · synthetic tracks' : 'Active review'
+    const context = !review.example ? 'Active review' : review.round === 1 ? 'Sample project · synthetic tracks' : 'Started from sample'
+    get('desk-kicker').textContent = 'Round ' + review.round + ' · ' + context
     const offset = get('offset-note')
     offset.hidden = !review.comparison.offset
     offset.textContent = review.comparison.offset
       ? 'Matching cues suggest a shift of ' + signedMs(review.comparison.offset) + ' across part or all of the track. Rows show actual time changes.'
       : ''
     this.renderSummary()
-    this.renderQueue()
+    const index = this.selected ? this.getVisible().indexOf(this.selected) : 0
+    this.showPage(Math.floor(Math.max(index, 0) / PAGE_SIZE))
     this.renderDetail()
   }
 
@@ -107,9 +119,14 @@ export class Desk {
       ? progress.value + ' of ' + rows.length + ' reviewed'
       : 'No review items'
     this.nextCue.hidden = !stats.pending
+    const followUps = rows.filter(row => row.followUp)
+    const open = followUps.filter(row => this.review!.decisions[row.id]?.status !== 'accepted').length
+    get('followup-summary').hidden = get('filter-followups').hidden = !followUps.length
+    get('followup-count').textContent = open + ' of ' + followUps.length
+      + (followUps.length === 1 ? ' follow-up open' : ' follow-ups open')
   }
 
-  private getVisible(): Row[] {
+  private getVisible(): ReviewRow[] {
     const review = this.review
     if (!review) return []
     const query = this.search.value.trim().toLowerCase()
@@ -117,12 +134,18 @@ export class Desk {
     return review.comparison.rows.filter(row => {
       if (filter !== 'all') {
         if (!actionable(row)) return false
-        if (filter === 'advisories' && !row.issues.length) return false
-        if (filter !== 'queue' && filter !== 'advisories' && (review.decisions[row.id]?.status ?? 'pending') !== filter) return false
+        if (filter === 'advisories') {
+          if (!row.issues.length) return false
+        } else if (filter === 'follow-ups') {
+          if (!row.followUp) return false
+        } else if (filter !== 'queue' && (review.decisions[row.id]?.status ?? 'pending') !== filter) return false
       }
       if (!query) return true
       const times = [...row.before, ...row.after].flatMap(cue => [formatTime(cue.start), formatTime(cue.end)])
-      return [...times, cueText(row.before), cueText(row.after), ...rowLabels(row), review.decisions[row.id]?.note ?? '']
+      const request = row.followUp?.request
+      if (request?.kind === 'cue') times.push(formatTime(request.time))
+      return [...times, cueText(row.before), cueText(row.after), ...rowLabels(row), review.decisions[row.id]?.note ?? '',
+        request?.note ?? '', request?.latestNote ?? '', request?.excerpt ?? '']
         .some(value => value.toLowerCase().includes(query))
     })
   }
@@ -146,15 +169,19 @@ export class Desk {
       button.type = 'button'
       button.dataset.row = row.id
       button.setAttribute('aria-current', row.id === this.selected?.id ? 'true' : 'false')
-      const time = el('span', 'queue-time', row.id === 'track' ? 'TRACK' : formatTime(row.time))
+      const time = el('span', 'queue-time', isTrackDetails(row) ? 'TRACK' : formatTime(row.time))
       const preview = el('span', 'queue-preview')
-      const text = el('span', 'queue-text', cueText(row.after.length ? row.after : row.before) || (row.id === 'track' ? 'File format and track metadata' : 'Empty cue'))
+      const request = row.followUp?.request
+      const subject = request?.latestNote || request?.note || cueText(row.after.length ? row.after : row.before)
+        || request?.excerpt || (isTrackDetails(row) ? 'File format and track metadata' : 'Empty cue')
+      const text = el('span', 'queue-text', subject)
       text.dir = 'auto'
       const tags = el('span', 'queue-tags')
       rowLabels(row).forEach(label => tags.append(tag(label, 'type-' + label.toLowerCase().replace(' ', '-'))))
       if (row.issues.length && row.changes.length) tags.append(tag(row.issues.length + ' advisory' + (row.issues.length === 1 ? '' : ' items'), 'type-advisory'))
       const status = this.review?.decisions[row.id]?.status
-      if (status && status !== 'pending') tags.append(tag(labels[status], status))
+      if (row.followUp) tags.append(tag(signals[row.followUp.signal], row.followUp.signal === 'check' || row.followUp.signal === 'missing' ? 'type-advisory' : ''))
+      if (status && status !== 'pending') tags.append(tag(decisionLabel(row, status), status))
       preview.append(text, tags)
       button.append(time, preview, el('span', 'queue-arrow', '›'))
       button.lastElementChild?.setAttribute('aria-hidden', 'true')
@@ -174,7 +201,7 @@ export class Desk {
     get<HTMLButtonElement>('next-page').disabled = this.page >= last
   }
 
-  private select(row: Row, clicked = false): void {
+  private select(row: ReviewRow, clicked = false): void {
     if (row.id === this.selected?.id) {
       if (clicked && matchMedia('(max-width: 850px)').matches) get('inspector-title').focus()
       return
@@ -228,8 +255,10 @@ export class Desk {
       headline.append(el('span', 'delta', 'In ' + signedMs(row.delta[0]) + ' · Out ' + signedMs(row.delta[1])))
     }
     detail.append(headline)
+    if (row.followUp) detail.append(this.followUpEvidence(row.followUp))
     const columns = el('div', 'cue-pair')
-    const parts = row.changes.includes('Text') ? inlineDiff(row.before[0].text, row.after[0].text) : undefined
+    const parts = row.before.length === 1 && row.after.length === 1 && row.before[0].text !== row.after[0].text
+      ? inlineDiff(row.before[0].text, row.after[0].text) : undefined
     const sides = [
       { label: 'Reference', cues: row.before, track: review.reference, revised: false },
       { label: 'Revision', cues: row.after, track: review.revision, revised: true },
@@ -237,13 +266,16 @@ export class Desk {
     for (const { label, cues, track, revised } of sides) {
       const card = el('section', 'cue-card ' + (revised ? 'revision' : 'reference'))
       card.append(el('h3', 'eyebrow', label))
-      if (row.id === 'track') {
+      if (isTrackDetails(row)) {
         card.append(el('p', 'cue-locator', track.format.toUpperCase()))
         const data = el('div', 'cue-content metadata', track.metadata.join('\n\n') || 'No track metadata')
         data.dir = 'auto'
         card.append(data)
       } else if (!cues.length) {
-        card.append(el('p', 'cue-content absent', revised ? 'Removed in this revision' : 'No reference cue'))
+        const missing = revised
+          ? row.followUp ? 'No cue linked in this revision' : 'Removed in this revision'
+          : 'No reference cue'
+        card.append(el('p', 'cue-content absent', missing))
       } else {
         card.append(el('p', 'cue-locator', cueRange(cues)))
         for (const cue of cues) {
@@ -281,8 +313,37 @@ export class Desk {
     this.loadDecision()
   }
 
+  private followUpEvidence({ request, signal }: NonNullable<ReviewRow['followUp']>): HTMLElement {
+    const panel = el('section', 'request-evidence')
+    const location = request.kind === 'cue' ? ' · ' + formatTime(request.time) : ''
+    panel.append(
+      el('p', 'eyebrow', 'Request from round ' + originRound(request)),
+      el('p', 'request-source', request.sourceName + location),
+      el('h3', 'request-signal', signals[signal]),
+    )
+    const note = el('p', 'request-note', request.note || 'This item was marked Needs changes.')
+    note.dir = 'auto'
+    panel.append(note)
+    if (request.latestNote && request.latestNote !== request.note) {
+      const latest = el('p', 'request-note', 'Last follow-up · ' + request.latestNote)
+      latest.dir = 'auto'
+      panel.append(latest)
+    }
+    if (request.excerpt) {
+      const excerpt = el('blockquote', 'request-excerpt', request.excerpt + (request.exact || request.excerpt.length < MAX_EXCERPT ? '' : '…'))
+      excerpt.dir = 'auto'
+      panel.append(excerpt)
+    }
+    panel.append(el('p', 'evidence', 'Check the evidence before marking this request resolved.'))
+    return panel
+  }
+
   private loadDecision(): void {
     const decision = this.selected ? this.review?.decisions[this.selected.id] : undefined
+    if (this.selected) {
+      for (const option of this.status.options) option.textContent = decisionLabel(this.selected, option.value as Status)
+      this.note.placeholder = this.selected.followUp ? 'What did you verify or what still needs work?' : 'What should the editor check?'
+    }
     this.status.value = decision?.status ?? 'pending'
     this.note.value = decision?.note ?? ''
     this.refreshDecision()
