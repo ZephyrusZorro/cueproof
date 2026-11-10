@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { advanceReview, createReview, decide } from '../src/review.ts'
+import { advanceReview, createReview, csvReport, decide, decodeReview, encodeReview } from '../src/review.ts'
 import { formatTime, parseTrack } from '../src/track.ts'
 
 const track = (name: string, cues: [number, number, string][]) => parseTrack({
@@ -82,4 +82,22 @@ test('carries track-level presentation requests and compares new metadata', () =
   assert.equal(next.comparison.rows[0].followUp?.signal, 'changed')
   assert.match(next.comparison.rows[0].followUp?.request.excerpt ?? '', /color: red/)
   assert.equal(next.comparison.rows[0].after.length, 0)
+})
+
+test('v2 backups preserve request evidence and verification decisions', () => {
+  const next = track('returned.vtt', [[1000,3000,'[Applause]'],[4000,6000,'The vote is open.']])
+  const review = decide(advanceReview(fixture(), next), 'followup:1/1:0', 'accepted', 'Auditioned.')
+  assert.deepEqual(decodeReview(encodeReview(review)), review)
+  assert.match(csvReport(review), /"Follow-up".*"Verified resolved","Auditioned."/)
+  assert.match(csvReport(review), /"Restore the applause cue."/)
+})
+
+test('rejects malformed or duplicate v2 links without applying decisions', () => {
+  const next = track('returned.vtt', [[1000,3000,'[Applause]']])
+  const backup = JSON.parse(encodeReview(advanceReview(fixture(), next)))
+  const [request] = backup.requests
+  for (const requests of [
+    [{ ...request, anchors: [9999] }], [{ ...request, anchors: [1, 1] }],
+    [{ ...request, id: '2/1:0' }], [request, request], [{ ...request, note: 1 }],
+  ]) assert.throws(() => decodeReview(JSON.stringify({ ...backup, requests })), /follow-up/)
 })

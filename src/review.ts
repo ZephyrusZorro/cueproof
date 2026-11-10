@@ -1,11 +1,19 @@
 import { compareTracks } from './compare.ts'
-import { buildFollowUps, captureRequest, MAX_ANCHORS, MAX_REQUESTS, MAX_ROUND, type FollowUpRequest, type ReviewComparison, type ReviewRow } from './followups.ts'
-import { formatTime, parseTrack, rangeEnd, type Cue, type Track, type TrackInput } from './track.ts'
+import {
+  buildFollowUps, captureRequest, isTrackDetails, MAX_ANCHORS, MAX_EXCERPT, MAX_REQUESTS,
+  MAX_ROUND, originRound, signals, type FollowUpRequest, type ReviewComparison, type ReviewRow,
+} from './followups.ts'
+import { formatTime, MAX_CUES, parseTrack, rangeEnd, type Cue, type Track, type TrackInput } from './track.ts'
 
 export const MAX_NOTE = 500
-export const MAX_BACKUP_BYTES = 48 * 1024 * 1024
+export const MAX_BACKUP_BYTES = 64 * 1024 * 1024
 export const labels = { pending: 'Unreviewed', accepted: 'Accepted', changes: 'Needs changes' } as const
 export type Status = keyof typeof labels
+export function decisionLabel(row: ReviewRow, status: Status): string {
+  if (row.followUp && status === 'accepted') return 'Verified resolved'
+  if (row.followUp && status === 'changes') return 'Still needs changes'
+  return labels[status]
+}
 export type Decision = { status: Status; note: string }
 export type Review = {
   reference: Track
@@ -71,7 +79,8 @@ function trackInput({ name, source }: TrackInput): TrackInput {
 
 export function encodeReview(review: Review): string {
   return JSON.stringify({
-    version: 1, reference: trackInput(review.reference), revision: trackInput(review.revision),
+    version: 2, round: review.round, reference: trackInput(review.reference), revision: trackInput(review.revision),
+    requests: review.comparison.rows.flatMap(row => row.followUp ? [row.followUp.request] : []),
     decisions: review.decisions, example: review.example,
   })
 }
@@ -87,6 +96,33 @@ function input(value: unknown): TrackInput {
   return { name: value.name, source: value.source }
 }
 
+function integer(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max
+}
+
+function parseRequests(value: unknown, round: number, cues: number): FollowUpRequest[] {
+  const invalid = () => new Error('The backup contains invalid follow-up evidence.')
+  if (!Array.isArray(value) || value.length > MAX_REQUESTS) throw invalid()
+  const ids = new Set<string>()
+  return value.map(entry => {
+    if (!record(entry)) throw invalid()
+    const { id, kind, sourceName, time, excerpt, exact, note, latestNote, anchors, tentative } = entry
+    const key = typeof id === 'string' ? /^([1-9]\d{0,3})\/(track|(\d{1,4}):(\d{1,4}))$/.exec(id) : null
+    if (typeof id !== 'string' || !key || ids.has(id) || Number(key[1]) >= round
+      || (kind !== 'track' && kind !== 'cue') || (kind === 'track') !== (key[2] === 'track')
+      || (kind === 'cue' && (Number(key[3]) > MAX_CUES || Number(key[4]) > MAX_CUES || !(Number(key[3]) || Number(key[4]))))
+      || typeof sourceName !== 'string' || !sourceName || sourceName.length > 512
+      || !integer(time, 0, 3_600_000_000_000) || typeof excerpt !== 'string' || excerpt.length > MAX_EXCERPT
+      || typeof exact !== 'boolean' || (exact && (kind !== 'cue' || !excerpt.trim()))
+      || typeof note !== 'string' || note.length > MAX_NOTE || typeof latestNote !== 'string' || latestNote.length > MAX_NOTE
+      || typeof tentative !== 'boolean' || !Array.isArray(anchors) || anchors.length > MAX_ANCHORS
+      || (kind === 'track' && anchors.length) || (tentative && !anchors.length)
+      || anchors.some((anchor, index) => !integer(anchor, index ? anchors[index - 1] + 1 : 1, cues))) throw invalid()
+    ids.add(id)
+    return { id, kind, sourceName, time, excerpt, exact, note, latestNote, anchors, tentative }
+  })
+}
+
 export function decodeReview(raw: string): Review {
   if (raw.length > MAX_BACKUP_BYTES) throw new Error('The review backup is too large.')
   let data: unknown
@@ -95,10 +131,15 @@ export function decodeReview(raw: string): Review {
   } catch {
     throw new Error('This review backup is not valid JSON.')
   }
-  if (!record(data) || data.version !== 1 || typeof data.example !== 'boolean' || !record(data.decisions)) {
+  if (!record(data) || (data.version !== 1 && data.version !== 2) || typeof data.example !== 'boolean' || !record(data.decisions)) {
     throw new Error('This is not a supported Cueproof review backup.')
   }
-  const review = createReview(parseTrack(input(data.reference)), parseTrack(input(data.revision)), data.example)
+  const reference = parseTrack(input(data.reference))
+  const revision = parseTrack(input(data.revision))
+  const round = data.version === 2 ? data.round : 1
+  if (!integer(round, 1, MAX_ROUND)) throw new Error('The backup contains an invalid review round.')
+  const requests = data.version === 2 ? parseRequests(data.requests, round, reference.cues.length) : []
+  const review = createReview(reference, revision, data.example, round, requests)
   const allowed = new Set(review.comparison.rows.filter(actionable).map(row => row.id))
   for (const [id, entry] of Object.entries(data.decisions)) {
     if (!allowed.has(id) || !record(entry) || typeof entry.status !== 'string' || !Object.hasOwn(labels, entry.status)
@@ -120,6 +161,7 @@ export function csvReport(review: Review): string {
     'Reference file', 'Revision file', 'Row', 'Changes', 'Reference in', 'Reference out', 'Revision in',
     'Revision out', 'Start delta (ms)', 'End delta (ms)', 'Reference text', 'Revision text',
     'Reference cue details', 'Revision cue details', 'Advisories', 'Decision', 'Note',
+    'Review round', 'Request origin', 'Original time', 'Original excerpt', 'Original request', 'Previous follow-up note', 'Evidence',
   ]
   const range = (cues: Cue[]) => cues.length ? [formatTime(cues[0].start), formatTime(rangeEnd(cues))] : ['', '']
   const text = (cues: Cue[]) => cues.map(cue => cue.text).join('\n\n')
@@ -129,16 +171,22 @@ export function csvReport(review: Review): string {
   ].filter(Boolean).join(' · ')).join('\n')
   const rows = review.comparison.rows.filter(actionable).map(row => {
     const decision = review.decisions[row.id]
+    const request = row.followUp?.request
     const metadata = (track: Track) => [track.format.toUpperCase(), ...track.metadata].join('\n\n')
     return [
       csvCell(review.reference.name), csvCell(review.revision.name), csvCell(row.id),
-      csvCell(row.changes.join(', ') || 'Advisory'), ...range(row.before).map(csvCell), ...range(row.after).map(csvCell),
+      csvCell(row.followUp ? 'Follow-up' : row.changes.join(', ') || 'Advisory'),
+      ...range(row.before).map(csvCell), ...range(row.after).map(csvCell),
       String(row.delta?.[0] ?? ''), String(row.delta?.[1] ?? ''),
-      csvCell(row.id === 'track' ? metadata(review.reference) : text(row.before)),
-      csvCell(row.id === 'track' ? metadata(review.revision) : text(row.after)),
+      csvCell(isTrackDetails(row) ? metadata(review.reference) : text(row.before)),
+      csvCell(isTrackDetails(row) ? metadata(review.revision) : text(row.after)),
       csvCell(evidence(row.before, review.reference)), csvCell(evidence(row.after, review.revision)),
       csvCell(row.issues.map(({cue, issue}) => 'Cue ' + cue + ' · ' + issue.message).join('\n')),
-      csvCell(labels[decision?.status ?? 'pending']), csvCell(decision?.note ?? ''),
+      csvCell(decisionLabel(row, decision?.status ?? 'pending')), csvCell(decision?.note ?? ''),
+      String(review.round), csvCell(request ? 'Round ' + originRound(request) + ' · ' + request.sourceName : ''),
+      csvCell(request?.kind === 'cue' ? formatTime(request.time) : ''), csvCell(request?.excerpt ?? ''),
+      csvCell(request?.note ?? ''), csvCell(request?.latestNote ?? ''),
+      csvCell(row.followUp ? signals[row.followUp.signal] : ''),
     ].join(',')
   })
   return '\uFEFF' + [header.map(csvCell).join(','), ...rows].join('\r\n') + '\r\n'

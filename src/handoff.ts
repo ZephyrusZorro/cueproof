@@ -38,7 +38,7 @@ export class Handoff {
       this.working = this.submit.disabled = this.input.disabled = true
       this.error.hidden = true
       try {
-        if (file.size > MAX_BACKUP_BYTES) throw new Error('The backup exceeds the 48 MiB limit.')
+        if (file.size > MAX_BACKUP_BYTES) throw new Error('The backup exceeds the 64 MiB limit.')
         let text: string
         try {
           text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())

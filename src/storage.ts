@@ -1,4 +1,4 @@
-type Snapshot = { token: string; content: string | null }
+type Snapshot = { token: string; content: string | null; previous?: string | null }
 
 export class ConflictError extends Error {
   constructor() {
@@ -33,12 +33,12 @@ export class ReviewStore {
     })
   }
 
-  write(content: string | null, expected: string | null): Promise<Snapshot> {
+  write(content: string | null, expected: string | null, previous?: string | null): Promise<Snapshot> {
     return new Promise((resolve, reject) => {
       const transaction = this.db.transaction('review', 'readwrite')
       const store = transaction.objectStore('review')
       const read = store.get('active')
-      const next = { token: crypto.randomUUID(), content }
+      const next: Snapshot = { token: crypto.randomUUID(), content }
       let conflict = false
       read.onsuccess = () => {
         const current = read.result as Snapshot | undefined
@@ -46,6 +46,7 @@ export class ReviewStore {
           conflict = true
           transaction.abort()
         } else {
+          next.previous = content === null ? null : previous === undefined ? current?.previous ?? null : previous
           store.put(next, 'active')
         }
       }

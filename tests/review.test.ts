@@ -21,12 +21,26 @@ test('decisions and untouched source round-trip through a portable review', () =
 test('rejects unknown schema, row identities and invalid decision data', () => {
   const input = JSON.parse(encodeReview(fixture()))
   for (const corrupt of [
-    { ...input, version: 2 }, { ...input, decisions: { '2:2': {status:'accepted',note:''} } },
+    { ...input, version: 99 }, { ...input, decisions: { '2:2': {status:'accepted',note:''} } },
     { ...input, decisions: { '1:1': {status:'accepted',note:'a'.repeat(501)} } },
     { ...input, decisions: { '1:1': {status:'other',note:''} } },
     { ...input, reference: { name:'not-vtt.vtt',source:'text' } },
   ]) assert.throws(() => decodeReview(JSON.stringify(corrupt)))
   assert.throws(() => decodeReview('{'), /valid JSON/)
+})
+
+test('decodes a v1 handoff with its original disposition intact', () => {
+  const { reference, revision } = fixture()
+  const legacy = {
+    version: 1,
+    reference: { name: reference.name, source: reference.source },
+    revision: { name: revision.name, source: revision.source },
+    example: false,
+    decisions: { '1:1': { status: 'changes', note: 'Add the speaker label.' } },
+  }
+  const restored = decodeReview(JSON.stringify(legacy))
+  assert.equal(restored.round, 1)
+  assert.deepEqual(restored.decisions, legacy.decisions)
 })
 
 test('exports quoted timecoded evidence and neutralizes spreadsheet formulas', () => {
@@ -62,6 +76,24 @@ test('persists across connections and refuses a stale concurrent overwrite', asy
   const current = await second.load()
   await second.write(null, current!.token)
   assert.equal((await first.load())?.content, null)
+  first.close()
+  second.close()
+})
+
+test('advances and archives atomically, preserves archives on decisions, and clears both', async () => {
+  const idb = new IDBFactory()
+  const first = await ReviewStore.open(idb)
+  const second = await ReviewStore.open(idb)
+  const prior = await first.write('round 1', null)
+  const advanced = await first.write('round 2', prior.token, prior.content)
+  await assert.rejects(second.write('stale content', prior.token, 'stale archive'), ConflictError)
+  const saved = await first.write('round 2 with decision', advanced.token)
+  assert.equal((await second.load())?.previous, 'round 1')
+  const replaced = await first.write('new project', saved.token, null)
+  assert.equal(replaced.previous, null)
+  const advancedAgain = await first.write('new project round 2', replaced.token, replaced.content)
+  await first.write(null, advancedAgain.token)
+  assert.equal((await second.load())?.previous, null)
   first.close()
   second.close()
 })
